@@ -1,19 +1,21 @@
 :root { --bg:#14151a; --panel:#1d1f27; --text:#eceef4; --muted:#9aa0b4; --accent:#ff7ab6;
-  --white:#2a2d38; --black:#22242d; --inscale:#34384a; --root:#3f4560; }
+  --white:#2a2d38; --black:#22242d; --inscale:#34384a; --root:#3f4560; color-scheme: dark; }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--text); font:14px system-ui, sans-serif; }
-.app { display:flex; flex-direction:column; height:100vh; }
-.topbar { display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:10px 16px; background:var(--panel); }
+html, body { height:100%; }
+body { margin:0; background:var(--bg); color:var(--text); font:14px system-ui, sans-serif; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+#root { height:100%; }
+.app { display:flex; flex-direction:column; height:100%; }
+.topbar { display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:10px 0; background:var(--panel); }
 .topbar h1 { font-size:16px; margin:0 8px 0 0; }
 .topbar label { display:flex; gap:6px; align-items:center; color:var(--muted); }
 button, select, input[type=text], .name { background:#2b2e3b; color:var(--text); border:1px solid #3a3e50; border-radius:6px; padding:6px 10px; font:inherit; cursor:pointer; }
 button:hover { background:#353949; }
 .play { background:var(--accent); color:#1a1020; font-weight:700; border:none; padding:8px 18px; }
-.tracks { display:flex; gap:8px; padding:8px 16px; flex-wrap:wrap; }
+.tracks { display:flex; gap:8px; padding:8px 0; flex-wrap:wrap; }
 .track-tab { border-width:2px; display:flex; align-items:center; gap:6px; }
 .track-tab.active { background:#3a3e50; }
 .dot { width:10px; height:10px; border-radius:50%; }
-.workspace { display:flex; flex:1; min-height:0; gap:12px; padding:0 16px 12px; }
+.workspace { display:flex; flex:1; min-height:0; gap:12px; padding:0 0 12px; }
 .roll { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--panel); border-radius:8px; }
 .roll-tools { display:flex; gap:6px; align-items:center; padding:8px; flex-wrap:wrap; color:var(--muted); }
 .spacer { flex:1; }
