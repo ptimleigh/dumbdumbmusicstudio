@@ -8,10 +8,10 @@ const LOW = 48, HIGH = 84; // C3..C6
 const BEAT_W = 48, ROW_H = 18, GRID = 0.25, HANDLE = 7;
 
 type DragMode = 'move' | 'left' | 'right';
-interface Drag { id: string; mode: DragMode; x0: number; y0: number; orig: Note; base: Note[]; lastPitch: number }
+interface Drag { gid: string; id: string; mode: DragMode; x0: number; y0: number; orig: Note; base: Note[]; lastPitch: number }
 
 export function PianoRoll({ project, track, playhead, onNotes }: {
-  project: Project; track: Track; playhead: number; onNotes: (n: Note[]) => void;
+  project: Project; track: Track; playhead: number; onNotes: (n: Note[], key?: string) => void;
 }) {
   const [duration, setDuration] = useState(1);
   const [lock, setLock] = useState(true);
@@ -38,7 +38,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     const rect = e.currentTarget.getBoundingClientRect();
     const edge = Math.min(HANDLE, rect.width / 3);
     const mode: DragMode = e.clientX - rect.left < edge ? 'left' : rect.right - e.clientX < edge ? 'right' : 'move';
-    drag.current = { id: n.id, mode, x0: e.clientX, y0: e.clientY, orig: n, base: track.notes, lastPitch: n.pitch };
+    drag.current = { gid: uid('drag'), id: n.id, mode, x0: e.clientX, y0: e.clientY, orig: n, base: track.notes, lastPitch: n.pitch };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
@@ -62,7 +62,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
       next = { ...orig, start, pitch };
       if (pitch !== d.lastPitch) { d.lastPitch = pitch; engine.preview(track, pitch); }
     }
-    onNotes(d.base.map(n => (n.id === d.id ? next : n)));
+    onNotes(d.base.map(n => (n.id === d.id ? next : n)), d.gid);
   }
 
   function endDrag(e: React.PointerEvent<HTMLDivElement>) {

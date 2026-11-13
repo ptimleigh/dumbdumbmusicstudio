@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Macros, Project, Role } from '../music/types';
+import type { Macros, Project, Role, Track } from '../music/types';
+import { change, initHistory, redo as redoHistory, undo as undoHistory } from '../music/history';
 import { newProject, newTrack, ROLE_LABELS } from '../music/project';
 import { NOTE_NAMES, SCALE_LABELS } from '../music/theory';
 import { fileNameFor, parseProject, serializeProject } from '../music/serialize';
@@ -9,7 +10,11 @@ import { PianoRoll } from './PianoRoll';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
-  const [project, setProject] = useState<Project>(() => loadAutosave() ?? newProject());
+  const [hist, setHist] = useState(() => initHistory(loadAutosave() ?? newProject()));
+  const project = hist.present;
+  type Opts = { key?: string; silent?: boolean };
+  const setProject = (f: (p: Project) => Project, o: Opts = {}) =>
+    setHist(h => change(h, f(h.present), { ...o, now: Date.now() }));
   const [activeId, setActiveId] = useState(project.tracks[0].id);
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
@@ -33,6 +38,10 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      const typing = tag === 'TEXTAREA' || (tag === 'INPUT' && (e.target as HTMLInputElement).type === 'text');
+      if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
       if (e.code === 'Space' && (e.target as HTMLElement).tagName !== 'SELECT' && (e.target as HTMLElement).tagName !== 'INPUT') {
         e.preventDefault(); togglePlay();
       }
@@ -61,11 +70,11 @@ export function App() {
         const presets = await engine.loadSoundFont(t, data);
         const sel = Math.min(selected, presets.length - 1);
         engine.selectPreset(t, presets[sel]);
-        patchTrack(t.id, x => ({ ...x, sound: { kind: 'soundfont', fileName, presets, selected: sel } }));
+        patchTrack(t.id, x => ({ ...x, sound: { kind: 'soundfont', fileName, presets, selected: sel } }), { silent: true });
       } catch {
         problems.push(`"${t.name}" used the SoundFont "${fileName}", which isn't on this computer yet. It is playing with the built-in sound until you pick that track and load the file.`);
         engine.useBuiltInSound(t);
-        patchTrack(t.id, x => ({ ...x, sound: { kind: 'synth' } }));
+        patchTrack(t.id, x => ({ ...x, sound: { kind: 'synth' } }), { silent: true });
       }
     }
     setNotices(problems);
@@ -74,7 +83,7 @@ export function App() {
   function openProject(p: Project) {
     engine.stop(); setPlaying(false);
     engine.resetAll();
-    setProject(p);
+    setHist(initHistory(p));
     projectRef.current = p;
     setActiveId(p.tracks[0].id);
     setSfError(null);
@@ -107,9 +116,21 @@ export function App() {
     else { await engine.play(); setPlaying(true); }
   }
 
-  const patch = (p: Partial<Project>) => setProject(prev => ({ ...prev, ...p }));
-  const patchTrack = (id: string, f: (t: Project['tracks'][number]) => Project['tracks'][number]) =>
-    setProject(prev => ({ ...prev, tracks: prev.tracks.map(t => (t.id === id ? f(t) : t)) }));
+  const patch = (p: Partial<Project>, key?: string) => setProject(prev => ({ ...prev, ...p }), { key });
+  const patchTrack = (id: string, f: (t: Track) => Track, o: Opts = {}) =>
+    setProject(prev => ({ ...prev, tracks: prev.tracks.map(t => (t.id === id ? f(t) : t)) }), o);
+
+  // Which SoundFont a track uses is tied to the audio engine, so undo never changes it.
+  const keepSound = (snap: Project, cur: Project): Project => ({
+    ...snap,
+    tracks: snap.tracks.map(t => {
+      const now = cur.tracks.find(x => x.id === t.id);
+      if (now) return { ...t, sound: now.sound };
+      return t.sound.kind === 'soundfont' ? { ...t, sound: { kind: 'synth' } } : t;
+    }),
+  });
+  const undo = () => setHist(h => undoHistory(h, keepSound));
+  const redo = () => setHist(h => redoHistory(h, keepSound));
 
   async function loadSoundFont(file: File) {
     const target = track;
@@ -118,7 +139,7 @@ export function App() {
       const data = await file.arrayBuffer();
       const presets = await engine.loadSoundFont(target, data);
       void putSoundFont(file.name, data);
-      patchTrack(target.id, t => ({ ...t, sound: { kind: 'soundfont', fileName: file.name, presets, selected: 0 } }));
+      patchTrack(target.id, t => ({ ...t, sound: { kind: 'soundfont', fileName: file.name, presets, selected: 0 } }), { silent: true });
     } catch (e) {
       setSfError(e instanceof Error ? e.message : 'Could not read that file. Try a .sf2, .sf3 or .dls SoundFont.');
     } finally { setLoadingId(null); }
@@ -126,9 +147,9 @@ export function App() {
   const choosePreset = (i: number) => {
     if (track.sound.kind !== 'soundfont') return;
     engine.selectPreset(track, track.sound.presets[i]);
-    patchTrack(track.id, t => t.sound.kind === 'soundfont' ? { ...t, sound: { ...t.sound, selected: i } } : t);
+    patchTrack(track.id, t => t.sound.kind === 'soundfont' ? { ...t, sound: { ...t.sound, selected: i } } : t, { silent: true });
   };
-  const useBuiltIn = () => { engine.useBuiltInSound(track); patchTrack(track.id, t => ({ ...t, sound: { kind: 'synth' } })); };
+  const useBuiltIn = () => { engine.useBuiltInSound(track); patchTrack(track.id, t => ({ ...t, sound: { kind: 'synth' } }), { silent: true }); };
 
   const addTrack = (role: Role) => {
     const t = newTrack(role);
@@ -139,7 +160,7 @@ export function App() {
     if (project.tracks.length === 1) return;
     engine.dispose(id);
     const rest = project.tracks.filter(t => t.id !== id);
-    setProject({ ...project, tracks: rest });
+    setProject(prev => ({ ...prev, tracks: prev.tracks.filter(t => t.id !== id) }));
     if (activeId === id) setActiveId(rest[0].id);
   };
 
@@ -147,7 +168,9 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <h1>🎹 Dumb Dumb Music Studio</h1>
-        <input className="song-name" aria-label="Song name" value={project.name} onChange={e => patch({ name: e.target.value })} />
+        <input className="song-name" aria-label="Song name" value={project.name} onChange={e => patch({ name: e.target.value }, 'song-name')} />
+        <button onClick={undo} disabled={hist.past.length === 0} title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button onClick={redo} disabled={hist.future.length === 0} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         <button onClick={saveToFile} title="Download this song as a file">Save</button>
         <button onClick={() => openRef.current?.click()} title="Open a saved song file">Open</button>
         <button onClick={newSong}>{confirmNew ? 'Click again to start over' : 'New'}</button>
@@ -155,7 +178,7 @@ export function App() {
           onChange={e => { const f = e.target.files?.[0]; if (f) void onOpenFile(f); e.target.value = ''; }} />
         <button className="play" onClick={togglePlay}>{playing ? '■ Stop' : '▶ Play'}</button>
         <label>Speed
-          <input type="range" min={60} max={180} value={project.tempo} onChange={e => patch({ tempo: +e.target.value })} />
+          <input type="range" min={60} max={180} value={project.tempo} onChange={e => patch({ tempo: +e.target.value }, 'tempo')} />
           <span>{project.tempo} bpm</span>
         </label>
         <label>Key
@@ -200,7 +223,7 @@ export function App() {
           project={project}
           track={track}
           playhead={playhead}
-          onNotes={notes => patchTrack(track.id, t => ({ ...t, notes }))}
+          onNotes={(notes, key) => patchTrack(track.id, t => ({ ...t, notes }), { key })}
         />
         <TrackPanel
           track={track}
@@ -209,10 +232,10 @@ export function App() {
           onLoadFile={loadSoundFont}
           onPreset={choosePreset}
           onBuiltIn={useBuiltIn}
-          onMacro={(k: keyof Macros, v: number) => { patchTrack(track.id, t => ({ ...t, macros: { ...t.macros, [k]: v } })); }}
-          onVolume={v => patchTrack(track.id, t => ({ ...t, volume: v }))}
+          onMacro={(k: keyof Macros, v: number) => { patchTrack(track.id, t => ({ ...t, macros: { ...t.macros, [k]: v } }), { key: `macro:${track.id}:${k}` }); }}
+          onVolume={v => patchTrack(track.id, t => ({ ...t, volume: v }), { key: `volume:${track.id}` })}
           onMute={m => patchTrack(track.id, t => ({ ...t, muted: m }))}
-          onRename={name => patchTrack(track.id, t => ({ ...t, name }))}
+          onRename={name => patchTrack(track.id, t => ({ ...t, name }), { key: `rename:${track.id}` })}
           onClear={() => patchTrack(track.id, t => ({ ...t, notes: [] }))}
           onRemove={() => removeTrack(track.id)}
           canRemove={project.tracks.length > 1}
