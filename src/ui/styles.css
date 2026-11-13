@@ -8,7 +8,7 @@ body { margin:0; background:var(--bg); color:var(--text); font:14px system-ui, s
 .topbar { display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:10px 0; background:var(--panel); }
 .topbar h1 { font-size:16px; margin:0 8px 0 0; }
 .topbar label { display:flex; gap:6px; align-items:center; color:var(--muted); }
-button, select, input[type=text], .name { background:#2b2e3b; color:var(--text); border:1px solid #3a3e50; border-radius:6px; padding:6px 10px; font:inherit; cursor:pointer; }
+button, select, input[type=text], .name, .song-name { background:#2b2e3b; color:var(--text); border:1px solid #3a3e50; border-radius:6px; padding:6px 10px; font:inherit; cursor:pointer; }
 button:hover { background:#353949; }
 .play { background:var(--accent); color:#1a1020; font-weight:700; border:none; padding:8px 18px; }
 .tracks { display:flex; gap:8px; padding:8px 0; flex-wrap:wrap; }
@@ -51,3 +51,7 @@ button:hover { background:#353949; }
 .file-name { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .error { color:#ff8a8a; font-size:12px; }
 button:disabled { opacity:.5; cursor:default; }
+
+.song-name { width:160px; font-weight:600; }
+.notices { background:#3a2f1c; border:1px solid #6b5628; border-radius:8px; padding:8px 12px; margin:8px 0 0; display:flex; gap:12px; align-items:center; justify-content:space-between; }
+.notices p { margin:0 0 4px; }

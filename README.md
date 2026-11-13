@@ -18,12 +18,14 @@ npm run dev
 - `src/audio/soundfont.ts` – SoundFont (SF2/SF3/DLS) instrument. One synth per track so each track keeps its own effect chain.
 - `src/audio/macros.ts` – pure mapping from friendly 0–10 sliders to real DSP parameters (tested).
 - `src/audio/engine.ts` – Web Audio engine: look-ahead scheduler + per-track effect chain.
+- `src/music/serialize.ts`, `src/storage.ts` – project files, autosave (localStorage) and SoundFont storage (IndexedDB).
 - `src/ui/` – React UI: piano roll, track tabs, sound-shaping panel.
 
 ## Roadmap
 
 1. ~~SoundFont (SF2) loading as an `Instrument`~~ (done: per-track, via SpessaSynth)
 2. Drum/percussion tracks
-3. WAV and MIDI export, project save/load
+3. ~~Project save/load~~ (done: autosave + file; SoundFonts remembered in the browser)
+3. WAV and MIDI export
 4. Audio recording/import
 5. Desktop wrapper for VST3/CLAP plugin hosting

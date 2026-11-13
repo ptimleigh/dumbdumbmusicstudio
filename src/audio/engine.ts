@@ -141,6 +141,11 @@ export class Engine {
     if (chain.instrument instanceof SoundFontInstrument) chain.instrument.dispose(chain.chain.input);
   }
 
+  /** Drop every track's audio chain (used when a different project is opened). */
+  resetAll() {
+    for (const id of [...this.chains.keys()]) this.dispose(id);
+  }
+
   dispose(trackId: string) {
     const chain = this.chains.get(trackId);
     if (chain) this.releaseInstrument(chain);

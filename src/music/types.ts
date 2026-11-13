@@ -39,6 +39,7 @@ export interface Track {
 }
 
 export interface Project {
+  name: string;
   tempo: number;
   beatsPerBar: number;
   bars: number;

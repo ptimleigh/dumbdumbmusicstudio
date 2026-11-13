@@ -14,5 +14,5 @@ export function newTrack(role: Role): Track {
 }
 
 export function newProject(): Project {
-  return { tempo: 100, beatsPerBar: 4, bars: 4, key: 0, scaleName: 'pentatonic', tracks: [newTrack('melody')] };
+  return { name: 'My song', tempo: 100, beatsPerBar: 4, bars: 4, key: 0, scaleName: 'pentatonic', tracks: [newTrack('melody')] };
 }

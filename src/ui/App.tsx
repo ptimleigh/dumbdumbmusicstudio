@@ -2,17 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 import type { Macros, Project, Role } from '../music/types';
 import { newProject, newTrack, ROLE_LABELS } from '../music/project';
 import { NOTE_NAMES, SCALE_LABELS } from '../music/theory';
+import { fileNameFor, parseProject, serializeProject } from '../music/serialize';
+import { clearAutosave, getSoundFont, loadAutosave, putSoundFont, saveAutosave } from '../storage';
 import { engine } from '../audio/engine';
 import { PianoRoll } from './PianoRoll';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
-  const [project, setProject] = useState<Project>(newProject);
+  const [project, setProject] = useState<Project>(() => loadAutosave() ?? newProject());
   const [activeId, setActiveId] = useState(project.tracks[0].id);
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [sfError, setSfError] = useState<string | null>(null);
+  const [notices, setNotices] = useState<string[]>([]);
+  const [confirmNew, setConfirmNew] = useState(false);
+  const openRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   engine.getProject = () => projectRef.current;
@@ -36,6 +41,67 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // autosave shortly after every change
+  useEffect(() => {
+    const t = window.setTimeout(() => saveAutosave(project), 400);
+    return () => clearTimeout(t);
+  }, [project]);
+
+  // bring back the SoundFonts the autosaved project was using
+  useEffect(() => { void restoreSoundFonts(projectRef.current); }, []);
+
+  async function restoreSoundFonts(p: Project) {
+    const problems: string[] = [];
+    for (const t of p.tracks) {
+      if (t.sound.kind !== 'soundfont') continue;
+      const { fileName, selected } = t.sound;
+      const data = await getSoundFont(fileName);
+      try {
+        if (!data) throw new Error('missing');
+        const presets = await engine.loadSoundFont(t, data);
+        const sel = Math.min(selected, presets.length - 1);
+        engine.selectPreset(t, presets[sel]);
+        patchTrack(t.id, x => ({ ...x, sound: { kind: 'soundfont', fileName, presets, selected: sel } }));
+      } catch {
+        problems.push(`"${t.name}" used the SoundFont "${fileName}", which isn't on this computer yet. It is playing with the built-in sound until you pick that track and load the file.`);
+        engine.useBuiltInSound(t);
+        patchTrack(t.id, x => ({ ...x, sound: { kind: 'synth' } }));
+      }
+    }
+    setNotices(problems);
+  }
+
+  function openProject(p: Project) {
+    engine.stop(); setPlaying(false);
+    engine.resetAll();
+    setProject(p);
+    projectRef.current = p;
+    setActiveId(p.tracks[0].id);
+    setSfError(null);
+    void restoreSoundFonts(p);
+  }
+
+  async function onOpenFile(file: File) {
+    try { openProject(parseProject(await file.text())); }
+    catch (e) { setNotices([e instanceof Error ? e.message : 'Could not open that file.']); }
+  }
+
+  function saveToFile() {
+    const url = URL.createObjectURL(new Blob([serializeProject(project)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = fileNameFor(project);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function newSong() {
+    if (!confirmNew) { setConfirmNew(true); window.setTimeout(() => setConfirmNew(false), 4000); return; }
+    setConfirmNew(false);
+    clearAutosave();
+    openProject(newProject());
+    setNotices([]);
+  }
+
   async function togglePlay() {
     if (engine.playing) { engine.stop(); setPlaying(false); }
     else { await engine.play(); setPlaying(true); }
@@ -49,7 +115,9 @@ export function App() {
     const target = track;
     setLoadingId(target.id); setSfError(null);
     try {
-      const presets = await engine.loadSoundFont(target, await file.arrayBuffer());
+      const data = await file.arrayBuffer();
+      const presets = await engine.loadSoundFont(target, data);
+      void putSoundFont(file.name, data);
       patchTrack(target.id, t => ({ ...t, sound: { kind: 'soundfont', fileName: file.name, presets, selected: 0 } }));
     } catch (e) {
       setSfError(e instanceof Error ? e.message : 'Could not read that file. Try a .sf2, .sf3 or .dls SoundFont.');
@@ -79,6 +147,12 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <h1>🎹 Dumb Dumb Music Studio</h1>
+        <input className="song-name" aria-label="Song name" value={project.name} onChange={e => patch({ name: e.target.value })} />
+        <button onClick={saveToFile} title="Download this song as a file">Save</button>
+        <button onClick={() => openRef.current?.click()} title="Open a saved song file">Open</button>
+        <button onClick={newSong}>{confirmNew ? 'Click again to start over' : 'New'}</button>
+        <input ref={openRef} type="file" accept=".json,application/json" hidden
+          onChange={e => { const f = e.target.files?.[0]; if (f) void onOpenFile(f); e.target.value = ''; }} />
         <button className="play" onClick={togglePlay}>{playing ? '■ Stop' : '▶ Play'}</button>
         <label>Speed
           <input type="range" min={60} max={180} value={project.tempo} onChange={e => patch({ tempo: +e.target.value })} />
@@ -100,6 +174,13 @@ export function App() {
           </select>
         </label>
       </header>
+
+      {notices.length > 0 && (
+        <div className="notices" role="status">
+          {notices.map((n, i) => <p key={i}>{n}</p>)}
+          <button onClick={() => setNotices([])}>Dismiss</button>
+        </div>
+      )}
 
       <div className="tracks">
         {project.tracks.map(t => (
