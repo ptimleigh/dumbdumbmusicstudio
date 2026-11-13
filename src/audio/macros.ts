@@ -11,28 +11,36 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 export interface DspParams {
   lowShelfDb: number;
   highShelfDb: number;
+  presenceDb: number;     // boost/cut around 2.8 kHz
   saturation: number;     // 0..1 waveshaper drive
   compThreshold: number;  // dB
   compRatio: number;
   compAttack: number;     // seconds
-  reverbMix: number;      // 0..1 wet send
+  makeupDb: number;       // keeps loudness steady while tone changes
+  dryLevel: number;       // 0..1 level of the unprocessed-by-reverb signal
+  reverbMix: number;      // wet send level
 }
 
 export function macrosToDsp(m: Macros): DspParams {
   const warm = centered(m.warmth);
   const punch = centered(m.punch);
-  const space = centered(m.space);
+  const space = clamp(m.space, 0, 10) / 10;
+  const punchUp = Math.max(0, punch);
+  const reverbMix = space * space * 6; // 0 = bone dry, 5 = a little room, 10 = big hall
   return {
-    // warm = more low end, softer top, a touch of saturation
-    lowShelfDb: warm * 6,
-    highShelfDb: -warm * 7,
-    saturation: Math.max(0, warm) * 0.6,
-    // punch = tighter dynamics; slower attack lets the transient through
-    compThreshold: -12 - Math.max(0, punch) * 14,
-    compRatio: 1 + Math.max(0, punch) * 7,
-    compAttack: 0.003 + Math.max(0, punch) * 0.027,
-    // space = reverb amount; "dry" end pulls it down to nothing
-    reverbMix: clamp(0.15 + space * 0.35, 0, 0.5) * (m.space <= 0 ? 0 : 1),
+    // warm = more low end, softer top, a touch of saturation; bright = the opposite
+    lowShelfDb: warm * 5,
+    highShelfDb: -warm * 6,
+    presenceDb: punch * (punch > 0 ? 5 : 4),
+    saturation: Math.max(0, warm) * 0.5,
+    // punch = squash the tails so the start of each note stands out
+    compThreshold: -18 - punchUp * 18,
+    compRatio: 1 + punchUp * 9,
+    compAttack: 0.005 + punchUp * 0.03,
+    // measured against the built-in synth so tone changes don't also change loudness
+    makeupDb: Math.max(0, warm) * 4.4 + Math.max(0, -warm) * 0.5 - punchUp * 1.9 - 6.5 * Math.pow(space, 3),
+    dryLevel: 1 - 0.35 * space,
+    reverbMix,
   };
 }
 

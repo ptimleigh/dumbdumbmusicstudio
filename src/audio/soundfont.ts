@@ -41,6 +41,9 @@ export class SoundFontInstrument implements Instrument {
     this.synth.controllerChange(0, 0, preset.bankMSB);
     this.synth.controllerChange(0, 32, preset.bankLSB);
     this.synth.programChange(0, preset.program);
+    // the app's own Space slider controls reverb, so silence the SoundFont synth's built-in reverb and chorus
+    this.synth.controllerChange(0, 91, 0);
+    this.synth.controllerChange(0, 93, 0);
   }
 
   playNote(_ctx: BaseAudioContext, _dest: AudioNode, pitch: number, when: number, duration: number, velocity: number) {

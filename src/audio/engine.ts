@@ -1,46 +1,19 @@
 import type { Project, SoundFontPreset, Track } from '../music/types';
 import { SoundFontInstrument } from './soundfont';
 import { BuiltInSynth, type Instrument } from './instrument';
-import { macrosToDsp } from './macros';
+import { applyMacros, createTrackChain, makeImpulse, type TrackChain } from './chain';
 
-interface TrackChain {
-  input: GainNode;
-  low: BiquadFilterNode;
-  high: BiquadFilterNode;
-  shaper: WaveShaperNode;
-  comp: DynamicsCompressorNode;
-  reverbSend: GainNode;
-  out: GainNode;
+interface EngineTrack {
+  chain: TrackChain;
   instrument: Instrument;
   soundfontFile?: ArrayBuffer;
-}
-
-function makeImpulse(ctx: BaseAudioContext, seconds = 2.2, decay = 3): AudioBuffer {
-  const len = Math.floor(ctx.sampleRate * seconds);
-  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const d = buf.getChannelData(c);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
-  }
-  return buf;
-}
-
-function saturationCurve(amount: number): Float32Array<ArrayBuffer> {
-  const n = 1024;
-  const curve = new Float32Array(n);
-  const k = amount * 40;
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * 2 - 1;
-    curve[i] = k === 0 ? x : ((1 + k) * x) / (1 + k * Math.abs(x));
-  }
-  return curve;
 }
 
 export class Engine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private reverb!: ConvolverNode;
-  private chains = new Map<string, TrackChain>();
+  private chains = new Map<string, EngineTrack>();
   private timer: number | null = null;
   private startedAt = 0;      // ctx time corresponding to beat 0 of the current pass
   private scheduledUpTo = 0;  // beats
@@ -61,21 +34,11 @@ export class Engine {
     return ctx;
   }
 
-  private chainFor(track: Track): TrackChain {
+  private chainFor(track: Track): EngineTrack {
     const ctx = this.ensure();
     let c = this.chains.get(track.id);
     if (!c) {
-      const input = ctx.createGain();
-      const low = ctx.createBiquadFilter(); low.type = 'lowshelf'; low.frequency.value = 200;
-      const high = ctx.createBiquadFilter(); high.type = 'highshelf'; high.frequency.value = 4000;
-      const shaper = ctx.createWaveShaper(); shaper.oversample = '2x';
-      const comp = ctx.createDynamicsCompressor(); comp.knee.value = 12; comp.release.value = 0.2;
-      const out = ctx.createGain();
-      const reverbSend = ctx.createGain();
-      input.connect(low); low.connect(high); high.connect(shaper); shaper.connect(comp); comp.connect(out);
-      out.connect(this.master);
-      comp.connect(reverbSend); reverbSend.connect(this.reverb);
-      c = { input, low, high, shaper, comp, reverbSend, out, instrument: new BuiltInSynth(track.role) };
+      c = { chain: createTrackChain(ctx, this.master, this.reverb), instrument: new BuiltInSynth(track.role) };
       this.chains.set(track.id, c);
     }
     return c;
@@ -84,18 +47,7 @@ export class Engine {
   /** Push the current macro/volume settings into the audio graph (safe to call often). */
   applyTrackSettings(track: Track) {
     const ctx = this.ensure();
-    const c = this.chainFor(track);
-    const d = macrosToDsp(track.macros);
-    const t = ctx.currentTime;
-    const ramp = (p: AudioParam, v: number) => p.setTargetAtTime(v, t, 0.02);
-    ramp(c.low.gain, d.lowShelfDb);
-    ramp(c.high.gain, d.highShelfDb);
-    c.shaper.curve = d.saturation > 0 ? saturationCurve(d.saturation) : null;
-    ramp(c.comp.threshold, d.compThreshold);
-    ramp(c.comp.ratio, d.compRatio);
-    ramp(c.comp.attack, d.compAttack);
-    ramp(c.reverbSend.gain, d.reverbMix);
-    ramp(c.out.gain, track.muted ? 0 : track.volume);
+    applyMacros(ctx, this.chainFor(track).chain, track.macros, track.volume, track.muted);
   }
 
   /** Play a single note immediately (for auditioning while editing). */
@@ -103,7 +55,7 @@ export class Engine {
     const ctx = this.ensure();
     if (ctx.state === 'suspended') void ctx.resume();
     this.applyTrackSettings(track);
-    this.chainFor(track).instrument.playNote(ctx, this.chainFor(track).input, pitch, ctx.currentTime + 0.01, duration, 0.8);
+    this.chainFor(track).instrument.playNote(ctx, this.chainFor(track).chain.input, pitch, ctx.currentTime + 0.01, duration, 0.8);
   }
 
   async play() {
@@ -151,7 +103,7 @@ export class Engine {
             const absStart = n.start + k * total;
             if (absStart >= from && absStart < to) {
               const when = this.startedAt + absStart * secPerBeat;
-              chain.instrument.playNote(ctx, chain.input, n.pitch, when, n.duration * secPerBeat, 0.8);
+              chain.instrument.playNote(ctx, chain.chain.input, n.pitch, when, n.duration * secPerBeat, 0.8);
             }
           }
         }
@@ -164,7 +116,7 @@ export class Engine {
   async loadSoundFont(track: Track, file: ArrayBuffer): Promise<SoundFontPreset[]> {
     const ctx = this.ensure();
     const chain = this.chainFor(track);
-    const sf = await SoundFontInstrument.create(ctx, chain.input, file);
+    const sf = await SoundFontInstrument.create(ctx, chain.chain.input, file);
     this.releaseInstrument(chain);
     chain.instrument = sf;
     chain.soundfontFile = file;
@@ -185,8 +137,8 @@ export class Engine {
     chain.soundfontFile = undefined;
   }
 
-  private releaseInstrument(chain: TrackChain) {
-    if (chain.instrument instanceof SoundFontInstrument) chain.instrument.dispose(chain.input);
+  private releaseInstrument(chain: EngineTrack) {
+    if (chain.instrument instanceof SoundFontInstrument) chain.instrument.dispose(chain.chain.input);
   }
 
   dispose(trackId: string) {
