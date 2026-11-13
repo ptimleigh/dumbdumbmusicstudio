@@ -1,6 +1,6 @@
 import type { Project, SoundFontPreset, Track } from '../music/types';
 import { SoundFontInstrument } from './soundfont';
-import { BuiltInSynth, type Instrument } from './instrument';
+import { builtInFor, type Instrument } from './instrument';
 import { applyMacros, createTrackChain, makeImpulse, type TrackChain } from './chain';
 
 interface EngineTrack {
@@ -38,7 +38,7 @@ export class Engine {
     const ctx = this.ensure();
     let c = this.chains.get(track.id);
     if (!c) {
-      c = { chain: createTrackChain(ctx, this.master, this.reverb), instrument: new BuiltInSynth(track.role) };
+      c = { chain: createTrackChain(ctx, this.master, this.reverb), instrument: builtInFor(track.role) };
       this.chains.set(track.id, c);
     }
     return c;
@@ -116,7 +116,7 @@ export class Engine {
   async loadSoundFont(track: Track, file: ArrayBuffer): Promise<SoundFontPreset[]> {
     const ctx = this.ensure();
     const chain = this.chainFor(track);
-    const sf = await SoundFontInstrument.create(ctx, chain.chain.input, file);
+    const sf = await SoundFontInstrument.create(ctx, chain.chain.input, file, track.role === 'drums');
     this.releaseInstrument(chain);
     chain.instrument = sf;
     chain.soundfontFile = file;
@@ -133,7 +133,7 @@ export class Engine {
   useBuiltInSound(track: Track) {
     const chain = this.chainFor(track);
     this.releaseInstrument(chain);
-    chain.instrument = new BuiltInSynth(track.role);
+    chain.instrument = builtInFor(track.role);
     chain.soundfontFile = undefined;
   }
 

@@ -7,6 +7,7 @@ import { fileNameFor, parseProject, serializeProject } from '../music/serialize'
 import { clearAutosave, getSoundFont, loadAutosave, putSoundFont, saveAutosave } from '../storage';
 import { engine } from '../audio/engine';
 import { PianoRoll } from './PianoRoll';
+import { DrumGrid } from './DrumGrid';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
@@ -219,12 +220,17 @@ export function App() {
       </div>
 
       <main className="workspace">
-        <PianoRoll
-          project={project}
-          track={track}
-          playhead={playhead}
-          onNotes={(notes, key) => patchTrack(track.id, t => ({ ...t, notes }), { key })}
-        />
+        {track.role === 'drums' ? (
+          <DrumGrid project={project} track={track} playhead={playhead}
+            onNotes={(notes, key) => patchTrack(track.id, t => ({ ...t, notes }), { key })} />
+        ) : (
+          <PianoRoll
+            project={project}
+            track={track}
+            playhead={playhead}
+            onNotes={(notes, key) => patchTrack(track.id, t => ({ ...t, notes }), { key })}
+          />
+        )}
         <TrackPanel
           track={track}
           loading={loadingId === track.id}

@@ -12,7 +12,7 @@ export interface Macros {
   space: number;
 }
 
-export type Role = 'melody' | 'bass' | 'chords' | 'lead';
+export type Role = 'melody' | 'bass' | 'chords' | 'lead' | 'drums';
 
 export interface SoundFontPreset {
   name: string;

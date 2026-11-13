@@ -32,11 +32,11 @@ export function TrackPanel({ track, loading, error, onLoadFile, onPreset, onBuil
             <div className="file-name" title={sf.fileName}>{sf.fileName}</div>
           </>
         ) : (
-          <div className="file-name">Built-in synth</div>
+          <div className="file-name">{track.role === 'drums' ? 'Built-in drums' : 'Built-in synth'}</div>
         )}
         <div className="row-btns">
           <button disabled={loading} onClick={() => fileRef.current?.click()}>
-            {loading ? 'Loading…' : sf ? 'Load another SoundFont' : 'Load a SoundFont'}
+            {loading ? 'Loading…' : sf ? 'Load another SoundFont' : track.role === 'drums' ? 'Load a drum kit (SoundFont)' : 'Load a SoundFont'}
           </button>
           {sf && <button onClick={onBuiltIn}>Use built-in</button>}
         </div>

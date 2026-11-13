@@ -14,7 +14,7 @@ const num = (v: unknown, lo: number, hi: number, fallback: number) =>
 
 function parseTrack(raw: any): Track | null {
   if (!raw || typeof raw !== 'object') return null;
-  const role = ['melody', 'bass', 'chords', 'lead'].includes(raw.role) ? raw.role : 'melody';
+  const role = ['melody', 'bass', 'chords', 'lead', 'drums'].includes(raw.role) ? raw.role : 'melody';
   const base = newTrack(role);
   const notes: Note[] = Array.isArray(raw.notes)
     ? raw.notes

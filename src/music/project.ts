@@ -1,7 +1,7 @@
 import type { Project, Role, Track } from './types';
 
-const COLORS: Record<Role, string> = { melody: '#ff7ab6', bass: '#5aa9ff', chords: '#ffc857', lead: '#7be0a5' };
-export const ROLE_LABELS: Record<Role, string> = { melody: 'Melody', bass: 'Bass', chords: 'Chords', lead: 'Lead' };
+const COLORS: Record<Role, string> = { melody: '#ff7ab6', bass: '#5aa9ff', chords: '#ffc857', lead: '#7be0a5', drums: '#c792ea' };
+export const ROLE_LABELS: Record<Role, string> = { melody: 'Melody', bass: 'Bass', chords: 'Chords', lead: 'Lead', drums: 'Drums' };
 
 let counter = 0;
 export const uid = (p = 'id') => `${p}-${Date.now().toString(36)}-${(counter++).toString(36)}`;
