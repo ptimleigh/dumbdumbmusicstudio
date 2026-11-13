@@ -11,6 +11,8 @@ export function App() {
   const [activeId, setActiveId] = useState(project.tracks[0].id);
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [sfError, setSfError] = useState<string | null>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   engine.getProject = () => projectRef.current;
@@ -42,6 +44,23 @@ export function App() {
   const patch = (p: Partial<Project>) => setProject(prev => ({ ...prev, ...p }));
   const patchTrack = (id: string, f: (t: Project['tracks'][number]) => Project['tracks'][number]) =>
     setProject(prev => ({ ...prev, tracks: prev.tracks.map(t => (t.id === id ? f(t) : t)) }));
+
+  async function loadSoundFont(file: File) {
+    const target = track;
+    setLoadingId(target.id); setSfError(null);
+    try {
+      const presets = await engine.loadSoundFont(target, await file.arrayBuffer());
+      patchTrack(target.id, t => ({ ...t, sound: { kind: 'soundfont', fileName: file.name, presets, selected: 0 } }));
+    } catch (e) {
+      setSfError(e instanceof Error ? e.message : 'Could not read that file. Try a .sf2, .sf3 or .dls SoundFont.');
+    } finally { setLoadingId(null); }
+  }
+  const choosePreset = (i: number) => {
+    if (track.sound.kind !== 'soundfont') return;
+    engine.selectPreset(track, track.sound.presets[i]);
+    patchTrack(track.id, t => t.sound.kind === 'soundfont' ? { ...t, sound: { ...t.sound, selected: i } } : t);
+  };
+  const useBuiltIn = () => { engine.useBuiltInSound(track); patchTrack(track.id, t => ({ ...t, sound: { kind: 'synth' } })); };
 
   const addTrack = (role: Role) => {
     const t = newTrack(role);
@@ -85,7 +104,7 @@ export function App() {
       <div className="tracks">
         {project.tracks.map(t => (
           <button key={t.id} className={'track-tab' + (t.id === track.id ? ' active' : '')}
-            style={{ borderColor: t.color }} onClick={() => setActiveId(t.id)}>
+            style={{ borderColor: t.color }} onClick={() => { setActiveId(t.id); setSfError(null); }}>
             <span className="dot" style={{ background: t.color }} />{t.name}
           </button>
         ))}
@@ -104,6 +123,11 @@ export function App() {
         />
         <TrackPanel
           track={track}
+          loading={loadingId === track.id}
+          error={sfError}
+          onLoadFile={loadSoundFont}
+          onPreset={choosePreset}
+          onBuiltIn={useBuiltIn}
           onMacro={(k: keyof Macros, v: number) => { patchTrack(track.id, t => ({ ...t, macros: { ...t.macros, [k]: v } })); }}
           onVolume={v => patchTrack(track.id, t => ({ ...t, volume: v }))}
           onMute={m => patchTrack(track.id, t => ({ ...t, muted: m }))}

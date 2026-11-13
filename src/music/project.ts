@@ -9,7 +9,7 @@ export const uid = (p = 'id') => `${p}-${Date.now().toString(36)}-${(counter++).
 export function newTrack(role: Role): Track {
   return {
     id: uid('track'), name: ROLE_LABELS[role], role, color: COLORS[role], notes: [],
-    macros: { warmth: 5, punch: 5, space: 5 }, volume: 0.8, muted: false,
+    macros: { warmth: 5, punch: 5, space: 5 }, sound: { kind: 'synth' }, volume: 0.8, muted: false,
   };
 }
 

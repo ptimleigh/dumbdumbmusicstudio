@@ -14,6 +14,18 @@ export interface Macros {
 
 export type Role = 'melody' | 'bass' | 'chords' | 'lead';
 
+export interface SoundFontPreset {
+  name: string;
+  bankMSB: number;
+  bankLSB: number;
+  program: number;
+}
+
+/** Where a track's sound comes from. */
+export type TrackSound =
+  | { kind: 'synth' }
+  | { kind: 'soundfont'; fileName: string; presets: SoundFontPreset[]; selected: number };
+
 export interface Track {
   id: string;
   name: string;
@@ -21,6 +33,7 @@ export interface Track {
   color: string;
   notes: Note[];
   macros: Macros;
+  sound: TrackSound;
   volume: number; // 0..1
   muted: boolean;
 }

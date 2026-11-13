@@ -1,4 +1,5 @@
-import type { Project, Track } from '../music/types';
+import type { Project, SoundFontPreset, Track } from '../music/types';
+import { SoundFontInstrument } from './soundfont';
 import { BuiltInSynth, type Instrument } from './instrument';
 import { macrosToDsp } from './macros';
 
@@ -11,6 +12,7 @@ interface TrackChain {
   reverbSend: GainNode;
   out: GainNode;
   instrument: Instrument;
+  soundfontFile?: ArrayBuffer;
 }
 
 function makeImpulse(ctx: BaseAudioContext, seconds = 2.2, decay = 3): AudioBuffer {
@@ -158,7 +160,40 @@ export class Engine {
     }
   }
 
-  dispose(trackId: string) { this.chains.delete(trackId); }
+  /** Load a SoundFont file for a track and return the instruments inside it. */
+  async loadSoundFont(track: Track, file: ArrayBuffer): Promise<SoundFontPreset[]> {
+    const ctx = this.ensure();
+    const chain = this.chainFor(track);
+    const sf = await SoundFontInstrument.create(ctx, chain.input, file);
+    this.releaseInstrument(chain);
+    chain.instrument = sf;
+    chain.soundfontFile = file;
+    sf.selectPreset(sf.presets[0]);
+    return sf.presets;
+  }
+
+  selectPreset(track: Track, preset: SoundFontPreset) {
+    const inst = this.chainFor(track).instrument;
+    if (inst instanceof SoundFontInstrument) inst.selectPreset(preset);
+  }
+
+  /** Go back to the built-in synth sound. */
+  useBuiltInSound(track: Track) {
+    const chain = this.chainFor(track);
+    this.releaseInstrument(chain);
+    chain.instrument = new BuiltInSynth(track.role);
+    chain.soundfontFile = undefined;
+  }
+
+  private releaseInstrument(chain: TrackChain) {
+    if (chain.instrument instanceof SoundFontInstrument) chain.instrument.dispose(chain.input);
+  }
+
+  dispose(trackId: string) {
+    const chain = this.chains.get(trackId);
+    if (chain) this.releaseInstrument(chain);
+    this.chains.delete(trackId);
+  }
 }
 
 export const engine = new Engine();
