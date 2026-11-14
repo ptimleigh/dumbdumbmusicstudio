@@ -129,12 +129,12 @@ export const MenuSeparator = () => <div className="menu-sep" role="separator" />
 
 /* ---------- segmented control ---------- */
 export function Segmented<T extends string | number>({ value, options, onChange, label, size }: {
-  value: T; options: { value: T; label: ReactNode; title?: string }[]; onChange: (v: T) => void; label: string; size?: 'sm';
+  value: T; options: { value: T; label: ReactNode; title?: string; name?: string }[]; onChange: (v: T) => void; label: string; size?: 'sm';
 }) {
   return (
     <div className={'segmented' + (size ? ' ' + size : '')} role="radiogroup" aria-label={label}>
       {options.map(o => (
-        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} title={o.title}
+        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} title={o.title} aria-label={o.name}
           className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>
       ))}
     </div>

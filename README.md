@@ -32,7 +32,7 @@ person's own browser; nothing is uploaded anywhere.
 - `src/audio/macros.ts` also holds the one-click sound styles (Vibes).
 - `src/audio/transport.ts` – playback position, start points and loop regions as pure functions (tested). The engine plays from any beat and can loop a section.
 - `src/audio/engine.ts` – Web Audio engine: look-ahead scheduler + per-track effect chain.
-- `src/music/drums.ts`, `src/ui/DrumGrid.tsx` – drum step grid (drum hits are ordinary notes with General MIDI pitches).
+- `src/music/drums.ts`, `src/ui/DrumGrid.tsx` – drum step grid (drum hits are ordinary notes with General MIDI pitches), with box selection, move, and bar-based copy/paste/repeat (tested).
 - `src/audio/midi.ts` – Standard MIDI File export (one track per track, tempo/key, drums on channel 10, slides as pitch-wheel moves). `src/audio/zip.ts` – tiny ZIP writer for the track-file export.
 - `src/audio/recorder.ts`, `src/audio/wav.ts`, `src/ui/ExportDialog.tsx` – WAV export (plays once in real time while recording, then encodes 16-bit PCM; optionally records every track on its own in the same pass, all aligned to the same audio frame).
 - `src/music/harmony.ts` – chords from the key, chord detection, "what comes next" suggestions, clash detection (pure, tested).

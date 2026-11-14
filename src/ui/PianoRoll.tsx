@@ -359,8 +359,8 @@ export function PianoRoll({ project, track, playhead, playing, startBeat, loop, 
       <div className="roll-bar">
         <Segmented label="Tool" value={tool} onChange={setTool}
           options={[
-            { value: 'draw', label: <><Icon name="pencil" size={15} /><span className="lbl">Draw</span></>, title: 'Click the grid to add notes' },
-            { value: 'select', label: <><Icon name="select" size={15} /><span className="lbl">Select</span></>, title: 'Drag a box around notes to select them (or hold Shift in Draw mode)' },
+            { value: 'draw', label: <><Icon name="pencil" size={15} /><span className="lbl">Draw</span></>, title: 'Click the grid to add notes', name: 'Draw' },
+            { value: 'select', label: <><Icon name="select" size={15} /><span className="lbl">Select</span></>, title: 'Drag a box around notes to select them (or hold Shift in Draw mode)', name: 'Select' },
           ]} />
         <Popover buttonClass="btn small" title="How long each new note is" trigger={<><span className="muted lbl">Note</span> {lengthLabel}<Icon name="chevron" size={14} /></>}>
           {close => (

@@ -446,3 +446,6 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
 .export-option { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; margin: 0 0 12px; }
 .export-option p { margin: 8px 0 0; line-height: 1.5; }
 .dialog .small { font-size: 12.5px; }
+
+.drum-hit.selected { outline: 2px solid #fff; outline-offset: 0; z-index: 2; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 45%, transparent), 0 2px 8px #0008; }
+.drum-grid.select-tool { cursor: cell; touch-action: none; }

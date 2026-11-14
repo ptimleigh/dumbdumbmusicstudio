@@ -8,14 +8,14 @@ const GROUPS: { title: string; rows: [string[], string][] }[] = [
     [['Ctrl', 'Shift', 'scroll'], 'Make the note rows taller or shorter'],
     [['+', '−'], 'Zoom in or out'], [['0'], 'Fit the whole song in the window'],
   ] },
-  { title: 'Adding and selecting notes', rows: [
+  { title: 'Adding and selecting notes (and drum hits)', rows: [
     [['Click'], 'Add a note on the grid'],
     [['Shift', 'drag'], 'Select several notes with a box'],
     [['Shift', 'click'], 'Add or remove a note from the selection'],
     [['Ctrl', 'A'], 'Select all notes on this track'],
     [['Esc'], 'Deselect'],
   ] },
-  { title: 'Editing the selection', rows: [
+  { title: 'Editing the selection (the same keys work on drum hits)', rows: [
     [['←', '→'], 'Move earlier or later'],
     [['↑', '↓'], 'Move higher or lower'],
     [['Shift', '↑ ↓'], 'Move an octave'],
