@@ -122,3 +122,9 @@ button:disabled { opacity:.5; cursor:default; }
 .slide-tools input[type=range] { width:140px; accent-color:var(--accent); }
 .slide-readout { min-width:70px; color:var(--text); }
 .slide-tools button:disabled { opacity:.4; }
+
+.marquee { position:absolute; border:1px dashed #fff; background:#ffffff1c; pointer-events:none; z-index:5; }
+.grid.select-tool { cursor:cell; touch-action:none; }
+.tool-switch, .btn-group { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.btn-group { padding-left:8px; border-left:1px solid #3a3e50; }
+.notice-inline { color:var(--text); background:#2f3550; border-radius:6px; padding:3px 8px; }
