@@ -49,8 +49,8 @@ export function ExportDialog({ project, onClose }: { project: Project; onClose: 
             <p className="muted">You will hear it as it records. Keep other sounds on your computer quiet, and leave this tab open and in front until it finishes.</p>
             {!hasNotes && <p className="error">There are no notes yet, so the file would be silent.</p>}
             <div className="row-btns">
-              <button className="play" onClick={start} disabled={!hasNotes}>Start recording</button>
-              <button onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={start} disabled={!hasNotes}>Start recording</button>
+              <button className="btn" onClick={onClose}>Cancel</button>
             </div>
           </>
         )}
@@ -58,19 +58,19 @@ export function ExportDialog({ project, onClose }: { project: Project; onClose: 
           <>
             <p>Recording… {Math.round(progress * total)} of {total} seconds</p>
             <div className="bar"><div className="bar-fill" style={{ width: `${progress * 100}%` }} /></div>
-            <div className="row-btns"><button onClick={cancel}>Cancel</button></div>
+            <div className="row-btns"><button className="btn" onClick={cancel}>Cancel</button></div>
           </>
         )}
         {phase === 'done' && (
           <>
             <p>Done. Your file <strong>{message}</strong> was downloaded. It is normalized so the loudest moment sits just below the maximum, so nothing is clipped.</p>
-            <div className="row-btns"><button className="play" onClick={onClose}>Close</button></div>
+            <div className="row-btns"><button className="btn btn-primary" onClick={onClose}>Close</button></div>
           </>
         )}
         {phase === 'error' && (
           <>
             <p className="error">{message}</p>
-            <div className="row-btns"><button onClick={() => setPhase('ready')}>Try again</button><button onClick={onClose}>Close</button></div>
+            <div className="row-btns"><button className="btn" onClick={() => setPhase('ready')}>Try again</button><button className="btn" onClick={onClose}>Close</button></div>
           </>
         )}
       </div>

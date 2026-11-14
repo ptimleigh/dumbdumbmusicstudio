@@ -26,6 +26,7 @@ npm run dev
 - `src/music/edit.ts` – pure note-editing helpers: group move/resize, scale steps, copy/paste, box selection (tested).
 - `src/music/history.ts` – undo/redo (pure, tested).
 - `src/music/serialize.ts`, `src/storage.ts` – project files, autosave (localStorage) and SoundFont storage (IndexedDB).
+- `src/ui/theme.css` – design tokens (dark and light). `shell.css` – layout and components. `kit.tsx` – icons, popovers, segmented control, switch, slider, toasts.
 - `src/ui/` – React UI: piano roll, track tabs, sound-shaping panel.
 
 ## Roadmap

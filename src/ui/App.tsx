@@ -10,6 +10,9 @@ import { PianoRoll } from './PianoRoll';
 import { DrumGrid } from './DrumGrid';
 import { ExportDialog } from './ExportDialog';
 import { Welcome } from './Welcome';
+import { ShortcutsDialog } from './ShortcutsDialog';
+import { Icon, LogoMark, MenuItem, MenuSeparator, Popover, Toasts, type Toast } from './kit';
+import { useTheme } from './useTheme';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
@@ -26,6 +29,14 @@ export function App() {
   const [notices, setNotices] = useState<string[]>([]);
   const [confirmNew, setConfirmNew] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toast = (text: string) => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, text }]);
+    window.setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+  };
+  const { theme, toggle: toggleTheme } = useTheme();
   const [showWelcome, setShowWelcome] = useState(() => {
     try { return localStorage.getItem('dumbdumb.welcomeSeen') !== '1'; } catch { return true; }
   });
@@ -56,6 +67,7 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
+      if (e.key === '?' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') { e.preventDefault(); setShowShortcuts(v => !v); return; }
       const typing = tag === 'TEXTAREA' || (tag === 'INPUT' && (e.target as HTMLInputElement).type === 'text');
       if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
@@ -108,7 +120,7 @@ export function App() {
   }
 
   async function onOpenFile(file: File) {
-    try { openProject(parseProject(await file.text())); }
+    try { const p = parseProject(await file.text()); openProject(p); toast(`Opened “${p.name}”`); }
     catch (e) { setNotices([e instanceof Error ? e.message : 'Could not open that file.']); }
   }
 
@@ -118,6 +130,7 @@ export function App() {
     a.href = url; a.download = fileNameFor(project);
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Saved ${a.download}`);
   }
 
   function newSong() {
@@ -126,6 +139,7 @@ export function App() {
     clearAutosave();
     openProject(newProject());
     setNotices([]);
+    toast('Started a new song');
   }
 
   function loadExample() {
@@ -189,38 +203,63 @@ export function App() {
   return (
     <div className="app">
       {exporting && <ExportDialog project={project} onClose={() => setExporting(false)} />}
+      {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
+      <Toasts items={toasts} />
       <header className="topbar">
-        <h1>🎹 Dumb Dumb Music Studio</h1>
+        <div className="brand"><LogoMark /><span className="brand-name">Dumb Dumb <em>Studio</em></span></div>
         <input className="song-name" aria-label="Song name" value={project.name} onChange={e => patch({ name: e.target.value }, 'song-name')} />
-        <button onClick={undo} disabled={hist.past.length === 0} title="Undo (Ctrl+Z)">↶ Undo</button>
-        <button onClick={redo} disabled={hist.future.length === 0} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-        <button onClick={() => setShowWelcome(v => !v)} title="Show or hide the getting-started tips" aria-label="Help" aria-pressed={showWelcome}>?</button>
-        <button onClick={() => { engine.stop(); setPlaying(false); setExporting(true); }} title="Record the song to an audio file">Export WAV</button>
-        <button onClick={saveToFile} title="Download this song as a file">Save</button>
-        <button onClick={() => openRef.current?.click()} title="Open a saved song file">Open</button>
-        <button onClick={newSong}>{confirmNew ? 'Click again to start over' : 'New'}</button>
+
+        <div className="transport" role="group" aria-label="Playback">
+          <button className="play-btn" onClick={togglePlay} aria-pressed={playing} aria-label={playing ? 'Stop' : 'Play'} title={playing ? 'Stop (Space)' : 'Play (Space)'}>
+            <Icon name={playing ? 'stop' : 'play'} size={22} />
+          </button>
+          <div className="stepper" role="group" aria-label="Speed">
+            <button className="btn-icon" onClick={() => patch({ tempo: Math.max(60, project.tempo - 1) }, 'tempo')} aria-label="Slower" title="Slower"><Icon name="left" size={16} /></button>
+            <Popover buttonClass="tempo-btn" title="Change the speed" align="center" label={`Speed ${project.tempo} beats per minute`}
+              trigger={<><b>{project.tempo}</b><small>BPM</small></>}>
+              <div className="popover-panel-inner pad">
+                <label className="speed-slider"><span>Speed</span>
+                  <input type="range" min={60} max={180} value={project.tempo} aria-label="Speed in beats per minute" onChange={e => patch({ tempo: +e.target.value }, 'tempo')} />
+                </label>
+              </div>
+            </Popover>
+            <button className="btn-icon" onClick={() => patch({ tempo: Math.min(180, project.tempo + 1) }, 'tempo')} aria-label="Faster" title="Faster"><Icon name="right" size={16} /></button>
+          </div>
+          <span className="divider" />
+          <div className="song-fields">
+            <SongFields project={project} patch={patch} />
+          </div>
+          <Popover buttonClass="btn-icon song-popover" align="end" title="Key, mood and length" label="Song settings" trigger={<Icon name="sliders" />}>
+            <div className="popover-panel-inner pad song-popover-body"><SongFields project={project} patch={patch} /></div>
+          </Popover>
+        </div>
+
+        <div className="top-actions">
+          <button className="btn-icon" onClick={undo} disabled={hist.past.length === 0} title="Undo (Ctrl+Z)" aria-label="Undo"><Icon name="undo" /></button>
+          <button className="btn-icon" onClick={redo} disabled={hist.future.length === 0} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><Icon name="redo" /></button>
+          <Popover buttonClass="btn" align="end" trigger={<><Icon name="menu" size={17} />File</>} title="Save, open and export">
+            {close => (
+              <div role="menu">
+                <MenuItem icon="download" onClick={() => { saveToFile(); close(); }} hint="">Save song</MenuItem>
+                <MenuItem icon="upload" onClick={() => { openRef.current?.click(); close(); }}>Open a song…</MenuItem>
+                <MenuItem icon="wave" onClick={() => { engine.stop(); setPlaying(false); setExporting(true); close(); }}>Export as audio (WAV)…</MenuItem>
+                <MenuSeparator />
+                <MenuItem icon="filePlus" danger={confirmNew} onClick={() => { if (!confirmNew) { setConfirmNew(true); window.setTimeout(() => setConfirmNew(false), 4000); } else { newSong(); close(); } }}>
+                  {confirmNew ? 'Click again to start over' : 'New song'}
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem icon="help" onClick={() => { setShowWelcome(v => !v); close(); }}>{showWelcome ? 'Hide getting-started tips' : 'Show getting-started tips'}</MenuItem>
+                <MenuItem icon="keyboard" hint="?" onClick={() => { setShowShortcuts(true); close(); }}>Keyboard shortcuts</MenuItem>
+                <MenuItem icon={theme === 'dark' ? 'sun' : 'moon'} onClick={() => { toggleTheme(); close(); }}>{theme === 'dark' ? 'Use the light look' : 'Use the dark look'}</MenuItem>
+              </div>
+            )}
+          </Popover>
+          <button className="btn-icon hide-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><Icon name="keyboard" /></button>
+          <button className="btn-icon hide-sm" onClick={() => setShowWelcome(v => !v)} aria-pressed={showWelcome} title="Show or hide the getting-started tips" aria-label="Help"><Icon name="help" /></button>
+          <button className="btn-icon hide-sm" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to the light look' : 'Switch to the dark look'} aria-label="Switch between light and dark"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
+        </div>
         <input ref={openRef} type="file" accept=".json,application/json" hidden
           onChange={e => { const f = e.target.files?.[0]; if (f) void onOpenFile(f); e.target.value = ''; }} />
-        <button className="play" onClick={togglePlay}>{playing ? '■ Stop' : '▶ Play'}</button>
-        <label>Speed
-          <input type="range" min={60} max={180} value={project.tempo} onChange={e => patch({ tempo: +e.target.value }, 'tempo')} />
-          <span>{project.tempo} bpm</span>
-        </label>
-        <label>Key
-          <select value={project.key} onChange={e => patch({ key: +e.target.value })}>
-            {NOTE_NAMES.map((n, i) => <option key={n} value={i}>{n}</option>)}
-          </select>
-        </label>
-        <label>Mood
-          <select value={project.scaleName} onChange={e => patch({ scaleName: e.target.value as Project['scaleName'] })}>
-            {Object.entries(SCALE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
-        <label>Length
-          <select value={project.bars} onChange={e => patch({ bars: +e.target.value })}>
-            {[2, 4, 8, 16].map(b => <option key={b} value={b}>{b} bars</option>)}
-          </select>
-        </label>
       </header>
 
       {showWelcome && <Welcome onExample={loadExample} onClose={closeWelcome} />}
@@ -232,17 +271,28 @@ export function App() {
         </div>
       )}
 
-      <div className="tracks">
+      <div className="tracks" role="tablist" aria-label="Tracks">
         {project.tracks.map(t => (
-          <button key={t.id} className={'track-tab' + (t.id === track.id ? ' active' : '')}
-            style={{ borderColor: t.color }} onClick={() => { setActiveId(t.id); setSfError(null); }}>
-            <span className="dot" style={{ background: t.color }} />{t.name}
-          </button>
+          <div key={t.id} className={'track-tab' + (t.id === track.id ? ' active' : '') + (t.muted ? ' muted' : '')} style={{ ['--c' as string]: t.color }}>
+            <button className="tab-main" role="tab" aria-selected={t.id === track.id} onClick={() => { setActiveId(t.id); setSfError(null); }}>
+              <span className="dot" />{t.name}
+            </button>
+            <button className="tab-mute" aria-pressed={t.muted} aria-label={`${t.muted ? 'Unmute' : 'Mute'} ${t.name}`} title={t.muted ? 'Unmute' : 'Mute'}
+              onClick={() => patchTrack(t.id, x => ({ ...x, muted: !x.muted }))}>
+              <Icon name={t.muted ? 'mute' : 'volume'} size={16} />
+            </button>
+          </div>
         ))}
-        <select className="add-track" value="" onChange={e => e.target.value && addTrack(e.target.value as Role)}>
-          <option value="">+ Add track…</option>
-          {(Object.keys(ROLE_LABELS) as Role[]).map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-        </select>
+        <Popover buttonClass="btn add-track-btn" trigger={<><Icon name="plus" size={16} />Add track</>} title="Add another track">
+          {close => (
+            <div role="menu">
+              <div className="menu-title">Add a track</div>
+              {(Object.keys(ROLE_LABELS) as Role[]).map(r => (
+                <MenuItem key={r} icon={r === 'drums' ? 'drum' : 'note'} onClick={() => { addTrack(r); close(); }}>{ROLE_LABELS[r]}</MenuItem>
+              ))}
+            </div>
+          )}
+        </Popover>
       </div>
 
       <main className="workspace">
@@ -278,5 +328,27 @@ export function App() {
         />
       </main>
     </div>
+  );
+}
+
+function SongFields({ project, patch }: { project: Project; patch: (p: Partial<Project>, key?: string) => void }) {
+  return (
+    <>
+      <label className="field"><span>Key</span>
+        <select value={project.key} onChange={e => patch({ key: +e.target.value })} aria-label="Key">
+          {NOTE_NAMES.map((n, i) => <option key={n} value={i}>{n}</option>)}
+        </select>
+      </label>
+      <label className="field"><span>Mood</span>
+        <select value={project.scaleName} onChange={e => patch({ scaleName: e.target.value as Project['scaleName'] })} aria-label="Mood">
+          {Object.entries(SCALE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </label>
+      <label className="field"><span>Length</span>
+        <select value={project.bars} onChange={e => patch({ bars: +e.target.value })} aria-label="Length">
+          {[2, 4, 8, 16].map(b => <option key={b} value={b}>{b} bars</option>)}
+        </select>
+      </label>
+    </>
   );
 }

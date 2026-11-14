@@ -1,0 +1,102 @@
+/* Design tokens. Dark is the default; light follows the system or the toggle. */
+:root {
+  --font: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --bg: #0d0e12;
+  --surface: #15171d;
+  --surface-2: #1b1e26;
+  --surface-3: #242835;
+  --line: #2a2f3c;
+  --line-strong: #3a4050;
+  --text: #eceef4;
+  --text-2: #b6bbcb;
+  --text-3: #8189a0;
+
+  --accent: #c4f24d;          /* LED lime: primary actions and "on" states */
+  --accent-ink: #1a2205;      /* text on top of the accent */
+  --accent-text: #c4f24d;     /* accent used as text or outline */
+  --accent-soft: #c4f24d22;
+  --danger: #ff6b6b;
+  --warn: #ffb454;
+
+  --roll-bg: #11131a;
+  --row-in: #181b25;
+  --row-root: #1f2331;
+  --row-black: #0f1117;
+  --beat-line: #ffffff0d;
+  --bar-line: #ffffff26;
+  --key-white: #e9ebf2;
+  --key-black: #20232d;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --shadow: 0 10px 30px #00000066, 0 2px 8px #00000044;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef0f5;
+    --surface: #ffffff;
+    --surface-2: #f5f6fa;
+    --surface-3: #e9ecf3;
+    --line: #dde1ea;
+    --line-strong: #c3c9d6;
+    --text: #14161c;
+    --text-2: #444b5d;
+    --text-3: #6d7489;
+    --accent-text: #4a6b00;
+    --accent-soft: #4a6b0018;
+    --danger: #d23f3f;
+    --warn: #a25f00;
+    --roll-bg: #f1f3f9;
+    --row-in: #e6e9f3;
+    --row-root: #d9deee;
+    --row-black: #eaecf3;
+    --beat-line: #0000000f;
+    --bar-line: #00000030;
+    --key-white: #ffffff;
+    --key-black: #2a2e3a;
+    --shadow: 0 10px 30px #1b244a22, 0 2px 8px #1b244a14;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #eef0f5;
+  --surface: #ffffff;
+  --surface-2: #f5f6fa;
+  --surface-3: #e9ecf3;
+  --line: #dde1ea;
+  --line-strong: #c3c9d6;
+  --text: #14161c;
+  --text-2: #444b5d;
+  --text-3: #6d7489;
+  --accent-text: #4a6b00;
+  --accent-soft: #4a6b0018;
+  --danger: #d23f3f;
+  --warn: #a25f00;
+  --roll-bg: #f1f3f9;
+  --row-in: #e6e9f3;
+  --row-root: #d9deee;
+  --row-black: #eaecf3;
+  --beat-line: #0000000f;
+  --bar-line: #00000030;
+  --key-white: #ffffff;
+  --key-black: #2a2e3a;
+  --shadow: 0 10px 30px #1b244a22, 0 2px 8px #1b244a14;
+  color-scheme: light;
+}
+
+/* names the older component styles still use */
+:root {
+  --panel: var(--surface);
+  --muted: var(--text-3);
+  --white: var(--roll-bg);
+  --black: var(--row-black);
+  --inscale: var(--row-in);
+  --root: var(--row-root);
+}

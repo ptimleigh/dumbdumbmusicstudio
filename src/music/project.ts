@@ -1,6 +1,6 @@
 import type { Project, Role, Track } from './types';
 
-const COLORS: Record<Role, string> = { melody: '#ff7ab6', bass: '#5aa9ff', chords: '#ffc857', lead: '#7be0a5', drums: '#c792ea' };
+const COLORS: Record<Role, string> = { melody: '#ff7eb6', bass: '#62a8ff', chords: '#ffcb57', lead: '#5ce1e6', drums: '#b79cff' };
 export const ROLE_LABELS: Record<Role, string> = { melody: 'Melody', bass: 'Bass', chords: 'Chords', lead: 'Lead', drums: 'Drums' };
 
 let counter = 0;

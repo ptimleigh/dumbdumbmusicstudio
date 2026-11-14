@@ -3,9 +3,9 @@ import type { Note, Project, Track } from '../music/types';
 import { DRUM_PATTERNS, DRUM_ROWS, STEP, STEPS_PER_BEAT, stepsPerBar } from '../music/drums';
 import { uid } from '../music/project';
 import { engine } from '../audio/engine';
+import { Icon, Popover, useElementWidth } from './kit';
 
-const STEP_W = 24, ROW_H = 32, LABEL_W = 96;
-const BEAT_W = STEP_W * STEPS_PER_BEAT;
+const ROW_H = 34, LABEL_W = 104, RULER_H = 28;
 
 interface Gesture { gid: string; paint: boolean; cur: Note[]; last: string }
 
@@ -14,6 +14,10 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
 }) {
   const total = project.bars * project.beatsPerBar;
   const steps = total * STEPS_PER_BEAT;
+  const [scrollRef, areaWidth] = useElementWidth<HTMLDivElement>();
+  // the song always fits the width of the screen
+  const STEP_W = Math.max(10, Math.min(44, areaWidth > 0 ? (areaWidth - LABEL_W - 2) / steps : 24));
+  const BEAT_W = STEP_W * STEPS_PER_BEAT;
   const gesture = useRef<Gesture | null>(null);
   const at = (n: Note) => `${n.pitch}:${Math.round(n.start / STEP)}`;
   const active = new Set(track.notes.map(at));
@@ -69,35 +73,72 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
   }
 
   return (
-    <section className="roll">
-      <div className="roll-tools">
-        <span>Start from a beat:</span>
-        {DRUM_PATTERNS.map((p, i) => (
-          <button key={p.label} className="chip" title={p.hint} onClick={() => fillPattern(i)}>{p.label}</button>
-        ))}
-        <span className="help-inline">(replaces what is on this track)</span>
+    <section className="roll" style={{ ['--c' as string]: track.color }}>
+      <div className="roll-bar">
+        <Popover buttonClass="btn small" title="Fill the whole song with a ready-made beat" trigger={<><Icon name="drum" size={15} />Start from a beat<Icon name="chevron" size={14} /></>}>
+          {close => (
+            <div role="menu">
+              <div className="menu-title">Replaces what is on this track</div>
+              {DRUM_PATTERNS.map((p, i) => (
+                <button key={p.label} role="menuitem" className="menu-item two-line" onClick={() => { fillPattern(i); close(); }}>
+                  <span className="menu-label"><strong>{p.label}</strong><small>{p.hint}</small></span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Popover>
+        <span className="spacer" />
+        <span className="muted bar-note">Click or drag across squares to paint hits</span>
       </div>
-      <div className="roll-scroll">
-        <div className="drum-labels" style={{ width: LABEL_W }}>
-          {DRUM_ROWS.map(r => (
-            <button key={r.pitch} className="drum-label" style={{ height: ROW_H }} onMouseDown={() => engine.preview(track, r.pitch, 0.4)}>{r.name}</button>
-          ))}
+      <div className="roll-main">
+        <div className="roll-scroll" ref={scrollRef}>
+          <div className="roll-inner" style={{ width: LABEL_W + steps * STEP_W }}>
+            <div className="ruler" style={{ height: RULER_H }}>
+              <div className="corner" style={{ width: LABEL_W }} />
+              <div className="ruler-track" style={{ width: steps * STEP_W }}>
+                {Array.from({ length: total }, (_, b) => {
+                  const bar = b % project.beatsPerBar === 0;
+                  return <div key={b} className={'tick' + (bar ? ' bar' : '')} style={{ left: b * BEAT_W }}>{bar && <span>{b / project.beatsPerBar + 1}</span>}</div>;
+                })}
+                {playhead > 0 && <div className="ruler-head" style={{ left: playhead * BEAT_W }} />}
+              </div>
+            </div>
+            <div className="roll-body">
+              <div className="drum-labels" style={{ width: LABEL_W }}>
+                {DRUM_ROWS.map(r => (
+                  <button key={r.pitch} className="drum-label" style={{ height: ROW_H }} onMouseDown={() => engine.preview(track, r.pitch, 0.4)} title={`Hear ${r.name}`}>{r.name}</button>
+                ))}
+              </div>
+              <div className="drum-grid" style={{ width: steps * STEP_W, height: DRUM_ROWS.length * ROW_H, ['--step-w' as string]: `${STEP_W}px`, ['--beat-w' as string]: `${BEAT_W}px` }}
+                onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+                {DRUM_ROWS.map(r => <div key={r.pitch} className="drum-row" style={{ height: ROW_H }} />)}
+                {Array.from({ length: Math.ceil(total / project.beatsPerBar) }, (_, b) => (
+                  <div key={b} className="beat-line bar" style={{ left: b * project.beatsPerBar * BEAT_W }} />
+                ))}
+                {track.notes.map(n => {
+                  const row = DRUM_ROWS.findIndex(r => r.pitch === n.pitch);
+                  if (row < 0) return null;
+                  return <div key={n.id} className="drum-hit" style={{ left: n.start / STEP * STEP_W + 1.5, top: row * ROW_H + 3, width: STEP_W - 3, height: ROW_H - 6 }} />;
+                })}
+                {playhead > 0 && <div className="playhead" style={{ left: playhead * BEAT_W }} />}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="drum-grid" style={{ width: steps * STEP_W, height: DRUM_ROWS.length * ROW_H, ['--step-w' as string]: `${STEP_W}px`, ['--beat-w' as string]: `${BEAT_W}px` }}
-          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-          {DRUM_ROWS.map(r => <div key={r.pitch} className="drum-row" style={{ height: ROW_H }} />)}
-          {Array.from({ length: Math.ceil(total / project.beatsPerBar) }, (_, b) => (
-            <div key={b} className="beat-line bar" style={{ left: b * project.beatsPerBar * BEAT_W }} />
-          ))}
-          {track.notes.map(n => {
-            const row = DRUM_ROWS.findIndex(r => r.pitch === n.pitch);
-            if (row < 0) return null;
-            return <div key={n.id} className="drum-hit" style={{ left: n.start / STEP * STEP_W + 1, top: row * ROW_H + 3, width: STEP_W - 2, height: ROW_H - 6, background: track.color }} />;
-          })}
-          <div className="playhead" style={{ left: playhead * BEAT_W, display: playhead > 0 ? 'block' : 'none' }} />
-        </div>
+        {track.notes.length === 0 && (
+          <div className="empty-hint" aria-hidden="true">
+            <Icon name="drum" size={22} />
+            <strong>Click a square to add a drum hit</strong>
+            <span>Or pick “Start from a beat” for a ready-made groove.</span>
+          </div>
+        )}
       </div>
-      <p className="help">Click a square to add a drum hit · drag across to paint or erase · click a drum name to hear it · Space to play/stop</p>
+      <div className="roll-foot">
+        <span><kbd>Click</kbd> add or remove a hit</span>
+        <span><kbd>Drag</kbd> paint a row</span>
+        <span>Click a drum name to hear it</span>
+        <span><kbd>Space</kbd> play</span>
+      </div>
     </section>
   );
 }
