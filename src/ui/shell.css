@@ -373,3 +373,15 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
   .sel-group:first-of-type { border-left: 0; margin-left: 0; }
   .shortcut-group dl > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* ---------- zoom ---------- */
+.zoom-fab { position: absolute; top: 40px; right: 14px; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; background: color-mix(in srgb, var(--surface-3) 92%, transparent); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+.zoom-fab .btn-icon { width: 34px; height: 34px; }
+.zoom-badge { font-size: 11px; font-weight: 800; color: var(--accent-text); padding: 2px 0 3px; font-variant-numeric: tabular-nums; }
+.snap-lines { position: absolute; left: 0; top: 0; pointer-events: none; background-image: repeating-linear-gradient(90deg, var(--beat-line) 0 1px, transparent 1px var(--snap-w)); opacity: .7; }
+.snap-ticks { position: absolute; left: 0; bottom: 0; right: 0; height: 5px; pointer-events: none; background-image: repeating-linear-gradient(90deg, var(--line-strong) 0 1px, transparent 1px var(--snap-w)); opacity: .55; }
+.tick span.sub { font-weight: 600; font-size: 10.5px; opacity: .8; }
+.snap-field { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.view-panel { min-width: 300px; }
+.zoom span { min-width: 82px; }
+@media (max-width: 800px) { .zoom-fab { flex-direction: row; top: 36px; right: 8px; } .zoom-badge { padding: 0 6px; } }

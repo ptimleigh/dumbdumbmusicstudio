@@ -3,6 +3,11 @@ import { Icon } from './kit';
 
 const GROUPS: { title: string; rows: [string[], string][] }[] = [
   { title: 'Playing', rows: [[['Space'], 'Play or stop'], [['Ctrl', 'Z'], 'Undo'], [['Ctrl', 'Shift', 'Z'], 'Redo']] },
+  { title: 'Zooming in', rows: [
+    [['Ctrl', 'scroll'], 'Zoom the timeline at your cursor (pinch on a trackpad or phone)'],
+    [['Ctrl', 'Shift', 'scroll'], 'Make the note rows taller or shorter'],
+    [['+', '−'], 'Zoom in or out'], [['0'], 'Fit the whole song in the window'],
+  ] },
   { title: 'Adding and selecting notes', rows: [
     [['Click'], 'Add a note on the grid'],
     [['Shift', 'drag'], 'Select several notes with a box'],

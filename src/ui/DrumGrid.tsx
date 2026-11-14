@@ -4,6 +4,7 @@ import { DRUM_PATTERNS, DRUM_ROWS, STEP, STEPS_PER_BEAT, stepsPerBar } from '../
 import { uid } from '../music/project';
 import { engine } from '../audio/engine';
 import { Icon, Popover, useElementWidth } from './kit';
+import { useTimeZoom } from './useZoom';
 
 const ROW_H = 34, LABEL_W = 104, RULER_H = 28;
 
@@ -15,9 +16,10 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
   const total = project.bars * project.beatsPerBar;
   const steps = total * STEPS_PER_BEAT;
   const [scrollRef, areaWidth] = useElementWidth<HTMLDivElement>();
-  // the song always fits the width of the screen
-  const STEP_W = Math.max(10, Math.min(44, areaWidth > 0 ? (areaWidth - LABEL_W - 2) / steps : 24));
-  const BEAT_W = STEP_W * STEPS_PER_BEAT;
+  // the song always fits the width of the screen; zooming magnifies it
+  const tz = useTimeZoom({ scrollRef, areaWidth, total, leftW: LABEL_W, minBeat: 40, maxBeat: 400, playhead, follow: true });
+  const BEAT_W = tz.beatW;
+  const STEP_W = BEAT_W / STEPS_PER_BEAT;
   const gesture = useRef<Gesture | null>(null);
   const at = (n: Note) => `${n.pitch}:${Math.round(n.start / STEP)}`;
   const active = new Set(track.notes.map(at));
@@ -124,6 +126,12 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
               </div>
             </div>
           </div>
+        </div>
+        <div className="zoom-fab" role="group" aria-label="Zoom">
+          <button className="btn-icon" onClick={() => tz.zoomBy(1.5)} disabled={tz.zoom >= tz.maxZoom - 0.001} title="Zoom in (+ or Ctrl+scroll)" aria-label="Zoom in"><Icon name="zoomIn" /></button>
+          <button className="btn-icon" onClick={() => tz.zoomBy(1 / 1.5)} disabled={tz.atFit} title="Zoom out (−)" aria-label="Zoom out"><Icon name="zoomOut" /></button>
+          <button className="btn-icon" onClick={tz.reset} disabled={tz.atFit} title="Fit the whole song in the window (0)" aria-label="Fit the song"><Icon name="fit" /></button>
+          {!tz.atFit && <span className="zoom-badge" aria-hidden="true">{tz.zoom >= 10 ? Math.round(tz.zoom) : tz.zoom.toFixed(1)}×</span>}
         </div>
         {track.notes.length === 0 && (
           <div className="empty-hint" aria-hidden="true">

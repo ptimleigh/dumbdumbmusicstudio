@@ -6,11 +6,21 @@ import { makeClip, moveNotes, notesInRect, pasteClip, resizeNotes, selectionBoun
 import { chordScaleOf, findClashes, lastChord, ROMAN, suggestNext, triadPitches } from '../music/harmony';
 import { engine } from '../audio/engine';
 import { uid } from '../music/project';
-import { Icon, Popover, Segmented, Switch, useElementWidth } from './kit';
+import { Icon, Popover, Segmented, Slider, Switch, useElementWidth } from './kit';
+import { useTimeZoom } from './useZoom';
 
 const LOW = 48, HIGH = 84; // C3..C6
-const KEYS_W = 52, RULER_H = 28, ROW_H = 20, GRID = 0.25, HANDLE = 7;
-const MIN_BEAT = 14, MAX_BEAT = 84;
+const KEYS_W = 52, RULER_H = 28, HANDLE = 7;
+const DEFAULT_ROW_H = 20, MIN_ROW_H = 14, MAX_ROW_H = 44;
+const MIN_BEAT = 14, MAX_BEAT = 640;
+const SNAPS: { value: number; label: string; title: string }[] = [
+  { value: 0.5, label: '½', title: 'Snap to half beats' },
+  { value: 0.25, label: '¼', title: 'Snap to quarter beats' },
+  { value: 0.125, label: '⅛', title: 'Snap to eighths of a beat' },
+  { value: 0.0625, label: '1⁄16', title: 'Snap to sixteenths of a beat (very fine)' },
+];
+/** The finest snap that is still wide enough on screen to aim at. */
+const autoSnap = (beatW: number) => (beatW >= 176 ? 0.0625 : beatW >= 88 ? 0.125 : 0.25);
 const LENGTH_HINT: Record<string, string> = { Tiny: '¼ beat', Short: '½ beat', Medium: '1 beat', Long: '2 beats', 'Very long': '4 beats' };
 
 type DragMode = 'move' | 'left' | 'right';
@@ -27,7 +37,9 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
   const [lock, setLock] = useState(true);
   const [showGhosts, setShowGhosts] = useState(true);
   const [showClashes, setShowClashes] = useState(true);
-  const [zoom, setZoom] = useState(1);
+  const [rowH, setRowH] = useState(DEFAULT_ROW_H);
+  const [snapPref, setSnapPref] = useState<'auto' | number>('auto');
+  const [follow, setFollow] = useState(true);
   const total = project.bars * project.beatsPerBar;
   const drag = useRef<Drag | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -39,9 +51,32 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
   const lastPointer = useRef<string>('mouse'); // double-click and right-click only remove notes with a mouse, never by accident on touch
   const [scrollRef, areaWidth] = useElementWidth<HTMLDivElement>();
 
-  // the song always fits the width of the screen; zoom widens it
-  const fit = areaWidth > 0 ? (areaWidth - KEYS_W - 2) / total : 48;
-  const BEAT_W = Math.max(MIN_BEAT, Math.min(MAX_BEAT, fit * zoom));
+  // the song always fits the width of the screen; zooming magnifies it
+  const tz = useTimeZoom({
+    scrollRef, areaWidth, total, leftW: KEYS_W, minBeat: MIN_BEAT, maxBeat: MAX_BEAT, playhead, follow,
+    onHeightZoom: factor => changeRowH(rowHRef.current * factor),
+  });
+  const BEAT_W = tz.beatW;
+  const ROW_H = rowH;
+  const GRID = snapPref === 'auto' ? autoSnap(BEAT_W) : snapPref;
+  const rowHRef = useRef(rowH);
+  rowHRef.current = rowH;
+
+  // changing the note height keeps the middle of the view where it is
+  const vAnchor = useRef<{ pitch: number; y: number } | null>(null);
+  function changeRowH(next: number) {
+    const el = scrollRef.current;
+    const h = Math.round(Math.min(MAX_ROW_H, Math.max(MIN_ROW_H, next)));
+    if (el && h !== rowHRef.current) {
+      const y = (el.clientHeight + RULER_H) / 2;
+      vAnchor.current = { pitch: HIGH - (el.scrollTop + y - RULER_H) / rowHRef.current, y };
+    }
+    setRowH(h);
+  }
+  useLayoutEffect(() => {
+    const a = vAnchor.current, el = scrollRef.current;
+    if (a && el) { el.scrollTop = Math.max(0, (HIGH - a.pitch) * rowH + RULER_H - a.y); vAnchor.current = null; }
+  }, [rowH, scrollRef]);
 
   // only notes that still exist count as selected (after undo, delete, or switching tracks)
   const selIds = new Set(track.notes.filter(n => selected.has(n.id)).map(n => n.id));
@@ -195,6 +230,15 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     if (d && d.last !== d.from) engine.preview(track, d.note.pitch, Math.min(1.5, d.note.duration * secPerBeat), d.last ? { semitones: d.last, late: d.note.bend?.late } : undefined);
   }
 
+  function zoomToSelection() {
+    const b = selectionBounds(track.notes, selIds);
+    const el = scrollRef.current;
+    if (!b || !el) return;
+    tz.zoomToSpan(b.start, b.end);
+    const mid = (b.low + b.high) / 2;
+    el.scrollTop = Math.max(0, (HIGH - mid) * ROW_H + RULER_H - el.clientHeight / 2);
+  }
+
   const removeNote = (id: string) => { setSelected(new Set()); onNotes(track.notes.filter(x => x.id !== id)); };
   const removeSelected = () => { setSelected(new Set()); onNotes(track.notes.filter(x => !selIds.has(x.id))); };
   const selectAll = () => setSelected(new Set(track.notes.map(n => n.id)));
@@ -330,11 +374,24 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
             </div>
           )}
         </Popover>
-        <Popover buttonClass="btn small" align="end" title="What to show on the grid" trigger={<><Icon name="eye" size={15} /><span className="lbl">View</span><Icon name="chevron" size={14} /></>}>
+        <Popover buttonClass="btn small" align="end" title="Zoom, snapping and what to show on the grid" trigger={<><Icon name="eye" size={15} /><span className="lbl">View</span><Icon name="chevron" size={14} /></>}>
           <div className="view-panel">
+            <label className="zoom"><span>Time zoom</span>
+              <Slider min={0} max={1} step={0.01} value={tz.maxZoom > 1 ? Math.log(tz.zoom) / Math.log(tz.maxZoom) : 0} label="Time zoom"
+                onChange={v => tz.zoomTo(Math.pow(tz.maxZoom, v))} />
+            </label>
+            <label className="zoom"><span>Note height</span>
+              <Slider min={MIN_ROW_H} max={MAX_ROW_H} step={1} value={rowH} label="Note height" onChange={changeRowH} />
+            </label>
+            <div className="snap-field">
+              <span className="muted small">Snap notes to</span>
+              <Segmented size="sm" label="Snap" value={snapPref === 'auto' ? 'auto' : String(snapPref)} onChange={v => setSnapPref(v === 'auto' ? 'auto' : +v)}
+                options={[{ value: 'auto', label: 'Auto', title: 'Snaps finer as you zoom in' }, ...SNAPS.map(x => ({ value: String(x.value), label: x.label, title: x.title }))]} />
+              <span className="muted small">Now snapping to {GRID >= 0.5 ? '½' : GRID >= 0.25 ? '¼' : GRID >= 0.125 ? '⅛' : '1⁄16'} of a beat</span>
+            </div>
+            <Switch checked={follow} onChange={setFollow}>Follow the playhead</Switch>
             <Switch checked={showGhosts} onChange={setShowGhosts}>Show other tracks faintly</Switch>
             <Switch checked={showClashes} onChange={setShowClashes}>Highlight clashes</Switch>
-            <label className="zoom"><span>Zoom</span><input type="range" min={0.6} max={2.4} step={0.05} value={zoom} onChange={e => setZoom(+e.target.value)} aria-label="Zoom" /></label>
           </div>
         </Popover>
       </div>
@@ -345,9 +402,11 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
             <div className="ruler" style={{ height: RULER_H }}>
               <div className="corner" style={{ width: KEYS_W }} />
               <div className="ruler-track" style={{ width: gridW }}>
+                {GRID * BEAT_W >= 8 && <div className="snap-ticks" style={{ ['--snap-w' as string]: `${GRID * BEAT_W}px` }} />}
                 {Array.from({ length: total }, (_, b) => {
                   const bar = b % project.beatsPerBar === 0;
-                  return <div key={b} className={'tick' + (bar ? ' bar' : '')} style={{ left: b * BEAT_W }}>{bar && <span>{b / project.beatsPerBar + 1}</span>}</div>;
+                  const label = bar ? String(b / project.beatsPerBar + 1) : BEAT_W >= 64 ? `${b / project.beatsPerBar + 1 | 0}.${(b % project.beatsPerBar) + 1}` : '';
+                  return <div key={b} className={'tick' + (bar ? ' bar' : '')} style={{ left: b * BEAT_W }}>{label && <span className={bar ? '' : 'sub'}>{label}</span>}</div>;
                 })}
                 {playhead > 0 && <div className="ruler-head" style={{ left: playhead * BEAT_W }} />}
               </div>
@@ -356,13 +415,14 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
               <div className="keys" style={{ width: KEYS_W }}>
                 {rows.map(p => (
                   <div key={p} className={'key' + (isBlackKey(p) ? ' black' : '')} style={{ height: ROW_H }} onMouseDown={() => engine.preview(track, p)}>
-                    {p % 12 === 0 ? noteName(p) : ''}
+                    {p % 12 === 0 || ROW_H >= 26 ? noteName(p) : ''}
                   </div>
                 ))}
               </div>
               <div className={'grid' + (tool === 'select' ? ' select-tool' : '')} style={{ width: gridW, height: gridH }}
                 onPointerDown={gridDown} onPointerMove={gridMove} onPointerUp={gridUp} onPointerCancel={gridUp} onClick={gridClick}>
                 {rows.map(p => <div key={p} className="row" style={{ height: ROW_H, background: rowBg(p) }} />)}
+                {GRID * BEAT_W >= 8 && <div className="snap-lines" style={{ width: gridW, height: gridH, ['--snap-w' as string]: `${GRID * BEAT_W}px` }} />}
                 {Array.from({ length: total }, (_, b) => (
                   <div key={b} className={'beat-line' + (b % project.beatsPerBar === 0 ? ' bar' : '')} style={{ left: b * BEAT_W }} />
                 ))}
@@ -402,6 +462,13 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
           </div>
         </div>
 
+        <div className="zoom-fab" role="group" aria-label="Zoom">
+          <button className="btn-icon" onClick={() => tz.zoomBy(1.5)} disabled={tz.zoom >= tz.maxZoom - 0.001} title="Zoom in (+ or Ctrl+scroll)" aria-label="Zoom in"><Icon name="zoomIn" /></button>
+          <button className="btn-icon" onClick={() => tz.zoomBy(1 / 1.5)} disabled={tz.atFit} title="Zoom out (−)" aria-label="Zoom out"><Icon name="zoomOut" /></button>
+          <button className="btn-icon" onClick={tz.reset} disabled={tz.atFit} title="Fit the whole song in the window (0)" aria-label="Fit the song"><Icon name="fit" /></button>
+          {!tz.atFit && <span className="zoom-badge" aria-hidden="true">{tz.zoom >= 10 ? Math.round(tz.zoom) : tz.zoom.toFixed(1)}×</span>}
+        </div>
+
         {track.notes.length === 0 && (
           <div className="empty-hint" aria-hidden="true">
             <Icon name="pencil" size={22} />
@@ -429,6 +496,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
                 <span className="sel-group">
                   <button className="btn-icon" onClick={repeatSelection} title="Copy these notes and place the copy right after them (Ctrl+D)" aria-label="Repeat"><Icon name="repeat" /></button>
                   <button className="btn-icon" onClick={copySelection} title="Copy (Ctrl+C)" aria-label="Copy"><Icon name="copy" /></button>
+                  <button className="btn-icon" onClick={zoomToSelection} title="Zoom in on the selected notes" aria-label="Zoom to selection"><Icon name="zoomIn" /></button>
                   {clipboard.current && <button className="btn-icon" onClick={pasteSelection} title="Paste (Ctrl+V). Each paste lands after the previous one." aria-label="Paste"><Icon name="paste" /></button>}
                 </span>
                 {selectedNote && (
