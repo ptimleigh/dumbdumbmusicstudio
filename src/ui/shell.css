@@ -442,3 +442,7 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
 .timing-label { min-width: 46px; color: var(--text-2); font-weight: 600; font-size: 13px; }
 .slide-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .slide-presets .pill:disabled { opacity: .5; cursor: default; }
+
+.export-option { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; margin: 0 0 12px; }
+.export-option p { margin: 8px 0 0; line-height: 1.5; }
+.dialog .small { font-size: 12.5px; }

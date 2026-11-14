@@ -26,7 +26,7 @@ export function macrosToDsp(m: Macros): DspParams {
   const punch = centered(m.punch);
   const space = clamp(m.space, 0, 10) / 10;
   const punchUp = Math.max(0, punch);
-  const reverbMix = space * space * 6; // 0 = bone dry, 5 = a little room, 10 = big hall
+  const reverbMix = space * space * 7.5; // 0 = bone dry, 5 = a little room, 10 = big hall
   return {
     // warm = more low end, softer top, a touch of saturation; bright = the opposite
     lowShelfDb: warm * 5,

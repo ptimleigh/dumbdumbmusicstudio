@@ -3,7 +3,9 @@ import type { Macros, Project, Role, Track } from '../music/types';
 import { change, initHistory, redo as redoHistory, undo as undoHistory } from '../music/history';
 import { exampleProject, newProject, newTrack, ROLE_LABELS } from '../music/project';
 import { NOTE_NAMES, SCALE_LABELS } from '../music/theory';
-import { fileNameFor, parseProject, serializeProject } from '../music/serialize';
+import { baseName, fileNameFor, parseProject, serializeProject } from '../music/serialize';
+import { buildMidi } from '../audio/midi';
+import { downloadBytes } from './download';
 import { clearAutosave, getSoundFont, loadAutosave, putSoundFont, saveAutosave } from '../storage';
 import { engine } from '../audio/engine';
 import { PianoRoll } from './PianoRoll';
@@ -156,6 +158,13 @@ export function App() {
     toast(`Saved ${a.download}`);
   }
 
+  /** A MIDI file opens in FL Studio, Ableton, Logic and other music programs. */
+  function exportMidi() {
+    const name = `${baseName(project)}.mid`;
+    downloadBytes(name, buildMidi(project), 'audio/midi');
+    toast(`Saved ${name}. In FL Studio: File → Import → MIDI file.`);
+  }
+
   function newSong() {
     if (!confirmNew) { setConfirmNew(true); window.setTimeout(() => setConfirmNew(false), 4000); return; }
     setConfirmNew(false);
@@ -282,6 +291,7 @@ export function App() {
                 <MenuItem icon="download" onClick={() => { saveToFile(); close(); }} hint="">Save song</MenuItem>
                 <MenuItem icon="upload" onClick={() => { openRef.current?.click(); close(); }}>Open a song…</MenuItem>
                 <MenuItem icon="wave" onClick={() => { engine.stop(); setPlaying(false); setExporting(true); close(); }}>Export as audio (WAV)…</MenuItem>
+                <MenuItem icon="note" onClick={() => { exportMidi(); close(); }}>Export as MIDI (for FL Studio)</MenuItem>
                 <MenuSeparator />
                 <MenuItem icon="filePlus" danger={confirmNew} onClick={() => { if (!confirmNew) { setConfirmNew(true); window.setTimeout(() => setConfirmNew(false), 4000); } else { newSong(); close(); } }}>
                   {confirmNew ? 'Click again to start over' : 'New song'}

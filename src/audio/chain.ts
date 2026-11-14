@@ -12,6 +12,7 @@ export interface TrackChain {
   makeup: GainNode;
   dry: GainNode;
   reverbSend: GainNode;
+  convolver: ConvolverNode;
   out: GainNode;
   panner: StereoPannerNode;
 }
@@ -41,7 +42,8 @@ function saturationCurve(amount: number): Float32Array<ArrayBuffer> {
   return curve;
 }
 
-export function createTrackChain(ctx: BaseAudioContext, master: AudioNode, reverb: AudioNode): TrackChain {
+/** Each track has its own reverb, so its echo follows its volume, mute and position, and can be recorded on its own. */
+export function createTrackChain(ctx: BaseAudioContext, master: AudioNode, impulse: AudioBuffer): TrackChain {
   const input = ctx.createGain();
   const low = ctx.createBiquadFilter(); low.type = 'lowshelf'; low.frequency.value = 200;
   const high = ctx.createBiquadFilter(); high.type = 'highshelf'; high.frequency.value = 4000;
@@ -52,12 +54,13 @@ export function createTrackChain(ctx: BaseAudioContext, master: AudioNode, rever
   const dry = ctx.createGain();
   const out = ctx.createGain();
   const reverbSend = ctx.createGain();
+  const convolver = ctx.createConvolver(); convolver.buffer = impulse;
   const panner = ctx.createStereoPanner();
   input.connect(low); low.connect(high); high.connect(presence); presence.connect(shaper);
   shaper.connect(comp); comp.connect(makeup);
   makeup.connect(dry); dry.connect(out); out.connect(panner); panner.connect(master);
-  makeup.connect(reverbSend); reverbSend.connect(reverb);
-  return { input, low, high, presence, shaper, comp, makeup, dry, reverbSend, out, panner };
+  makeup.connect(reverbSend); reverbSend.connect(convolver); convolver.connect(out);
+  return { input, low, high, presence, shaper, comp, makeup, dry, reverbSend, convolver, out, panner };
 }
 
 const db = (x: number) => Math.pow(10, x / 20);

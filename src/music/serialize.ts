@@ -76,7 +76,9 @@ export function parseProject(text: string): Project {
   };
 }
 
-export function fileNameFor(p: Project): string {
-  const safe = p.name.trim().replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-') || 'project';
-  return `${safe}.dumbdumb.json`;
+/** The song's name made safe to use in a file name, without an extension. */
+export function baseName(p: Project): string {
+  return p.name.trim().replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-') || 'song';
 }
+
+export const fileNameFor = (p: Project) => `${baseName(p)}.dumbdumb.json`;

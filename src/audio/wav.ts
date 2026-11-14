@@ -1,13 +1,24 @@
+/** The loudest sample in the audio, from 0 to 1 (or more if it clips). */
+export function peakOf(channels: Float32Array[]): number {
+  let peak = 0;
+  for (const ch of channels) for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
+  return peak;
+}
+
+/** The gain that brings a peak to a target level in dB, or 1 for silence. */
+export const gainForPeak = (peak: number, targetDb = -1) => (peak > 1e-4 ? Math.pow(10, targetDb / 20) / peak : 1);
+
 /**
  * Encodes audio as a 16-bit PCM WAV file.
+ * Pass `fixedGain` to apply a gain you chose yourself, for example so several files keep their levels relative to each other.
  * With `normalizeDb` set, the loudest peak is scaled to that level (default -1 dBFS) so the file is
  * as loud as possible without clipping. Silence is left alone.
  */
-export function encodeWav(channels: Float32Array[], sampleRate: number, normalizeDb: number | null = -1): ArrayBuffer {
+export function encodeWav(channels: Float32Array[], sampleRate: number, normalizeDb: number | null = -1, fixedGain?: number): ArrayBuffer {
   const numCh = channels.length;
   const frames = numCh ? channels[0].length : 0;
-  let gain = 1;
-  if (normalizeDb !== null) {
+  let gain = fixedGain ?? 1;
+  if (fixedGain === undefined && normalizeDb !== null) {
     let peak = 0;
     for (const ch of channels) for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
     if (peak > 1e-4) gain = Math.pow(10, normalizeDb / 20) / peak;

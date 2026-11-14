@@ -16,7 +16,7 @@ interface EngineTrack {
 export class Engine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
-  private reverb!: ConvolverNode;
+  private impulse!: AudioBuffer;
   private chains = new Map<string, EngineTrack>();
   private timer: number | null = null;
   private cursor = 0;        // beat of the next thing to schedule
@@ -24,6 +24,7 @@ export class Engine {
   private spb = 0.6;         // seconds per beat while scheduling
   private anchors: Anchor[] = [];
   private region: Region | null = null; // the section being looped; null plays the song once
+  private quietAt = 0;       // clock time by which earlier sounds (and their reverb tails) will have died away
   playing = false;
   private bypassed = new Set<string>();
 
@@ -36,9 +37,7 @@ export class Engine {
     this.master = ctx.createGain();
     this.master.gain.value = 0.8;
     this.master.connect(ctx.destination);
-    this.reverb = ctx.createConvolver();
-    this.reverb.buffer = makeImpulse(ctx);
-    this.reverb.connect(this.master);
+    this.impulse = makeImpulse(ctx);
     return ctx;
   }
 
@@ -46,20 +45,20 @@ export class Engine {
     const ctx = this.ensure();
     let c = this.chains.get(track.id);
     if (!c) {
-      c = { chain: createTrackChain(ctx, this.master, this.reverb), instrument: builtInFor(track.role, track.voice) };
+      c = { chain: createTrackChain(ctx, this.master, this.impulse), instrument: builtInFor(track.role, track.voice) };
       this.chains.set(track.id, c);
     }
     return c;
   }
 
   /** Push the current macro/volume settings into the audio graph (safe to call often). */
-  applyTrackSettings(track: Track) {
+  applyTrackSettings(track: Track, immediate = false) {
     const ctx = this.ensure();
     const et = this.chainFor(track);
     if (et.instrument instanceof BuiltInSynth && track.role !== 'drums') et.instrument.setVoice(track.voice ?? DEFAULT_VOICE[track.role]);
     // while a track is being compared, play it with every effect off (Space at 0 is fully dry)
     const macros: Macros = this.bypassed.has(track.id) ? { warmth: 5, punch: 5, space: 0 } : track.macros;
-    applyMacros(ctx, et.chain, macros, track.volume, track.muted, false, track.pan ?? 0);
+    applyMacros(ctx, et.chain, macros, track.volume, track.muted, immediate, track.pan ?? 0);
   }
 
   /** Turns all of a track's sound effects off or on, for comparing before and after. */
@@ -92,6 +91,7 @@ export class Engine {
       }
     }
     const t0 = ctx.currentTime + 0.05;
+    this.markBusy(horizon * spb + 3.4);
     for (const n of notes) {
       inst.instrument.playNote(ctx, inst.chain.input, n.pitch, t0 + n.start * spb, Math.min(n.duration, horizon - n.start) * spb, 0.8, n.bend);
     }
@@ -102,6 +102,7 @@ export class Engine {
     const ctx = this.ensure();
     if (ctx.state === 'suspended') void ctx.resume();
     this.applyTrackSettings(track);
+    this.markBusy(duration + 3.4);
     this.chainFor(track).instrument.playNote(ctx, this.chainFor(track).chain.input, pitch, ctx.currentTime + 0.01, duration, 0.8, bend);
   }
 
@@ -115,6 +116,7 @@ export class Engine {
     if (this.playing) return;
     const p = this.getProject();
     const total = p.bars * p.beatsPerBar;
+    for (const t of p.tracks) this.applyTrackSettings(t, true); // mute, volume and position are in place from the very first note
     const from = Math.min(Math.max(0, o.from ?? 0), Math.max(0, total - 0.01));
     this.region = normalizeRegion(o.loop, total);
     this.spb = 60 / p.tempo;
@@ -126,7 +128,13 @@ export class Engine {
     this.tick();
   }
 
+  /** Note that sound is (or was just) playing, so a recording can wait for it to fade. */
+  private markBusy(seconds: number) {
+    if (this.ctx) this.quietAt = Math.max(this.quietAt, this.ctx.currentTime + seconds);
+  }
+
   stop() {
+    if (this.playing) this.markBusy(3.4); // reverb and release tails keep ringing for a moment
     this.playing = false;
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
@@ -189,34 +197,62 @@ export class Engine {
 
   /**
    * Plays the song once from the start and records everything that comes out, in real time.
-   * Returns null if cancelled.
+   * With `stems`, every track that isn't muted and has notes is also recorded on its own (with its own effects and
+   * reverb), in the same pass, so all the files line up. Returns null if cancelled.
    */
-  async record(o: { tailSeconds: number; onProgress: (fraction: number) => void; signal: { cancelled: boolean } }):
-    Promise<{ channels: Float32Array[]; sampleRate: number } | null> {
+  async record(o: { tailSeconds: number; onProgress: (fraction: number) => void; signal: { cancelled: boolean }; stems?: boolean }):
+    Promise<{ channels: Float32Array[]; sampleRate: number; stems: { id: string; name: string; channels: Float32Array[] }[] } | null> {
     this.stop();
     const ctx = this.ensure();
     if (ctx.state === 'suspended') await ctx.resume();
-    const node = await createRecorderNode(ctx);
-    const sink = ctx.createGain(); sink.gain.value = 0;
-    node.connect(sink).connect(ctx.destination);
-    const left: Float32Array[] = [], right: Float32Array[] = [];
-    node.port.onmessage = e => { left.push(e.data[0]); right.push(e.data[1]); };
-    this.master.connect(node);
-
+    // let any earlier sound (a preview, or the end of playback) and its reverb die away, so it isn't recorded
+    const wait = Math.min(7, this.quietAt - ctx.currentTime);
+    if (wait > 0.05) await new Promise(r => setTimeout(r, wait * 1000));
     const p = this.getProject();
-    const seconds = (p.bars * p.beatsPerBar * 60) / p.tempo + o.tailSeconds + 0.15;
+    const totalBeats = p.bars * p.beatsPerBar;
+
+    // one recorder for the whole mix, and optionally one per track (tapped after its volume and position)
+    const taps: { id: string; name: string; node: AudioWorkletNode; source: AudioNode | null; left: Float32Array[]; right: Float32Array[]; done: boolean }[] = [];
+    const sink = ctx.createGain(); sink.gain.value = 0; sink.connect(ctx.destination);
+    const addTap = async (id: string, name: string, source: AudioNode | null) => {
+      const node = await createRecorderNode(ctx);
+      const tap = { id, name, node, source, left: [] as Float32Array[], right: [] as Float32Array[], done: false };
+      node.port.onmessage = e => { if (e.data === 'done') tap.done = true; else { tap.left.push(e.data[0]); tap.right.push(e.data[1]); } };
+      node.connect(sink);
+      (source ?? this.master).connect(node);
+      taps.push(tap);
+    };
+    await addTap('mix', 'mix', null);
+    if (o.stems) {
+      for (const t of p.tracks) {
+        if (t.muted || !t.notes.some(n => n.start < totalBeats)) continue;
+        await addTap(t.id, t.name, this.chainFor(t).chain.panner);
+      }
+    }
+
+    // arm every recorder to start on the same audio frame and capture the same number of frames, so the files line up exactly
+    const sr = ctx.sampleRate;
+    const songSeconds = (totalBeats * 60) / p.tempo;
+    const startFrame = Math.ceil(((ctx.currentTime + 0.05) * sr) / 128) * 128;
+    const frames = Math.ceil((songSeconds + o.tailSeconds + 0.3) * sr);
+    for (const t of taps) t.node.port.postMessage({ arm: true, startFrame, frames });
+    const startAt = startFrame / sr, duration = frames / sr;
+
     await this.play({ from: 0, loop: null });
-    const t0 = ctx.currentTime;
     try {
-      while (!o.signal.cancelled && ctx.currentTime - t0 < seconds) {
-        o.onProgress(Math.min(1, (ctx.currentTime - t0) / seconds));
-        await new Promise(r => setTimeout(r, 100));
+      const giveUp = ctx.currentTime + duration + 3;
+      while (!o.signal.cancelled && !taps.every(t => t.done) && ctx.currentTime < giveUp) {
+        o.onProgress(Math.min(1, Math.max(0, (ctx.currentTime - startAt) / duration)));
+        await new Promise(r => setTimeout(r, 50));
       }
     } finally {
       this.stop();
-      this.master.disconnect(node);
-      node.port.postMessage('stop');
-      node.disconnect(); sink.disconnect();
+      for (const t of taps) {
+        (t.source ?? this.master).disconnect(t.node);
+        t.node.port.postMessage('stop');
+        t.node.disconnect();
+      }
+      sink.disconnect();
     }
     if (o.signal.cancelled) return null;
     const join = (parts: Float32Array[]) => {
@@ -224,7 +260,15 @@ export class Engine {
       let off = 0; for (const a of parts) { out.set(a, off); off += a.length; }
       return out;
     };
-    return { channels: [join(left), join(right)], sampleRate: ctx.sampleRate };
+    // the mix goes through the master volume; the track taps come before it, so scale them to match and they add up to the mix
+    const master = this.master.gain.value;
+    const done = taps.map((t, i) => {
+      const ch = [join(t.left), join(t.right)];
+      if (i > 0 && master !== 1) for (const c of ch) for (let k = 0; k < c.length; k++) c[k] *= master;
+      return { id: t.id, name: t.name, channels: ch };
+    });
+    const mix = done[0];
+    return { channels: mix.channels, sampleRate: ctx.sampleRate, stems: done.slice(1) };
   }
 
   /** Load a SoundFont file for a track and return the instruments inside it. */

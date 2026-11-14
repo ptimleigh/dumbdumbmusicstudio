@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { encodeWav } from './wav';
+import { encodeWav, gainForPeak, peakOf } from './wav';
 
 const text = (v: DataView, o: number, n: number) => Array.from({ length: n }, (_, i) => String.fromCharCode(v.getUint8(o + i))).join('');
 
@@ -33,5 +33,14 @@ describe('encodeWav', () => {
   it('leaves silence alone', () => {
     const v = new DataView(encodeWav([new Float32Array(10)], 44100, -1));
     expect(v.getInt16(44, true)).toBe(0);
+  });
+  it('applies a fixed gain so several files keep their balance', () => {
+    const quiet = new DataView(encodeWav([Float32Array.of(0.1)], 44100, -1, 2));
+    expect(quiet.getInt16(44, true)).toBeCloseTo(0.2 * 32767, -1);
+  });
+  it('finds peaks and the gain to reach a target', () => {
+    expect(peakOf([Float32Array.of(0.2, -0.5), Float32Array.of(0.1)])).toBe(0.5);
+    expect(20 * Math.log10(gainForPeak(0.5, -1) * 0.5)).toBeCloseTo(-1, 6);
+    expect(gainForPeak(0)).toBe(1);
   });
 });
