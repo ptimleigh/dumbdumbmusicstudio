@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Note, Project, Track } from '../music/types';
 import { DURATION_LABELS, isBlackKey, isInScale, noteName, snapToScale } from '../music/theory';
-import { clampSemitones, slideToNext, type NoteBend } from '../music/bend';
+import { bendEnd, bendStart, clampSemitones, slideToNext, withSemitones, withTiming, type NoteBend } from '../music/bend';
 import { makeClip, moveNotes, notesInRect, pasteClip, resizeNotes, selectionBounds, stepInScale, type Clip } from '../music/edit';
 import { chordScaleOf, findClashes, lastChord, ROMAN, suggestNext, triadPitches } from '../music/harmony';
 import { engine } from '../audio/engine';
@@ -215,24 +215,37 @@ export function PianoRoll({ project, track, playhead, playing, startBeat, loop, 
     if (audition) engine.preview(track, n.pitch, Math.min(1.5, n.duration * secPerBeat), clean);
   }
 
-  const slideDrag = useRef<{ gid: string; y0: number; from: number; note: Note; last: number } | null>(null);
-  function slideDown(e: React.PointerEvent<HTMLDivElement>, n: Note) {
+  // Dragging the dot at the end of the glide changes its size (up or down) and where it ends (left or right).
+  // Dragging the small dot at the start changes where it begins.
+  const slideDrag = useRef<{ gid: string; kind: 'end' | 'start'; x0: number; y0: number; semis0: number; from0: number; to0: number; note: Note; last: NoteBend | undefined } | null>(null);
+  function slideDown(e: React.PointerEvent<HTMLDivElement>, n: Note, kind: 'end' | 'start') {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    slideDrag.current = { gid: uid('slide'), y0: e.clientY, from: n.bend?.semitones ?? 0, note: n, last: n.bend?.semitones ?? 0 };
+    const b = n.bend;
+    slideDrag.current = { gid: uid('slide'), kind, x0: e.clientX, y0: e.clientY, semis0: b?.semitones ?? 0, from0: b ? bendStart(b) : 0, to0: b ? bendEnd(b) : 1, note: n, last: b };
   }
   function slideMove(e: React.PointerEvent<HTMLDivElement>) {
     const d = slideDrag.current; if (!d) return;
-    const semis = clampSemitones(d.from - (e.clientY - d.y0) / ROW_H);
-    if (semis === d.last) return;
-    d.last = semis;
-    setBend(d.note, { semitones: semis, late: d.note.bend?.late }, d.gid, false);
-    engine.preview(track, d.note.pitch + semis, 0.25);
+    const w = Math.max(8, d.note.duration * BEAT_W);
+    const dx = (e.clientX - d.x0) / w;
+    let next: NoteBend | undefined;
+    if (d.kind === 'end') {
+      const semis = clampSemitones(d.semis0 - (e.clientY - d.y0) / ROW_H);
+      next = semis === 0 ? undefined : withTiming({ semitones: semis }, d.from0, d.to0 + dx);
+    } else {
+      if (d.semis0 === 0) return;
+      next = withTiming({ semitones: d.semis0 }, d.from0 + dx, d.to0);
+    }
+    if (JSON.stringify(next) === JSON.stringify(d.last)) return;
+    const changedSize = (next?.semitones ?? 0) !== (d.last?.semitones ?? 0);
+    d.last = next;
+    setBend(d.note, next, d.gid, false);
+    if (changedSize) engine.preview(track, d.note.pitch + (next?.semitones ?? 0), 0.25);
   }
   function slideUp(e: React.PointerEvent<HTMLDivElement>) {
     const d = slideDrag.current; slideDrag.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    if (d && d.last !== d.from) engine.preview(track, d.note.pitch, Math.min(1.5, d.note.duration * secPerBeat), d.last ? { semitones: d.last, late: d.note.bend?.late } : undefined);
+    if (d && d.last) engine.preview(track, d.note.pitch, Math.min(1.5, d.note.duration * secPerBeat), d.last); // hear the result
   }
 
   /** Mark the stretch of the song that holds the selected notes as the loop section, rounded out to whole beats. */
@@ -445,19 +458,31 @@ export function PianoRoll({ project, track, playhead, playing, startBeat, loop, 
                   </div>
                 ))}
                 <svg className="slides" width={gridW} height={gridH} aria-hidden="true">
-                  {track.notes.filter(n => n.bend).map(n => {
-                    const x0 = n.start * BEAT_W, x1 = (n.start + n.duration) * BEAT_W - 1;
+                  {track.notes.filter(n => n.bend && n.start < total).map(n => {
+                    const w = n.duration * BEAT_W - 1, x0 = n.start * BEAT_W;
+                    const xa = x0 + bendStart(n.bend!) * w, xb = x0 + bendEnd(n.bend!) * w;
                     const y0 = (HIGH - n.pitch) * ROW_H + ROW_H / 2, y1 = y0 - n.bend!.semitones * ROW_H;
-                    const xh = x0 + (n.bend!.late ? 0.5 : 0) * (x1 - x0);
-                    return <g key={n.id}><polyline points={`${x0},${y0} ${xh},${y0} ${x1},${y1}`} fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" /><circle cx={x1} cy={y1} r="3" fill="#fff" /></g>;
+                    return <g key={n.id}><polyline points={`${x0},${y0} ${xa},${y0} ${xb},${y1} ${x0 + w},${y1}`} fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" /><circle cx={xb} cy={y1} r="3" fill="#fff" /></g>;
                   })}
                 </svg>
-                {selectedNote && (
-                  <div className="slide-handle" title="Drag up or down to slide this note"
-                    style={{ left: (selectedNote.start + selectedNote.duration) * BEAT_W + 3, top: (HIGH - selectedNote.pitch - (selectedNote.bend?.semitones ?? 0)) * ROW_H + ROW_H / 2 - 7 }}
-                    onPointerDown={e => slideDown(e, selectedNote)} onPointerMove={slideMove} onPointerUp={slideUp} onPointerCancel={slideUp}
-                    onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} />
-                )}
+                {selectedNote && (() => {
+                  const n = selectedNote, b = n.bend, w = n.duration * BEAT_W - 1, x0 = n.start * BEAT_W;
+                  const to = b ? bendEnd(b) : 1, from = b ? bendStart(b) : 0;
+                  const yBase = (HIGH - n.pitch) * ROW_H + ROW_H / 2;
+                  const yTarget = yBase - (b?.semitones ?? 0) * ROW_H;
+                  const handlers = (kind: 'end' | 'start') => ({
+                    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => slideDown(e, n, kind), onPointerMove: slideMove, onPointerUp: slideUp, onPointerCancel: slideUp,
+                    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(), onClick: (e: React.MouseEvent) => e.stopPropagation(),
+                  });
+                  return (
+                    <>
+                      <div className="slide-handle" title="Drag up or down to set how far it slides. Drag left or right to set where the slide ends."
+                        style={{ left: x0 + to * w + (to >= 0.999 ? 3 : 0), top: yTarget - 7 }} {...handlers('end')} />
+                      {b && <div className="slide-handle start" title="Drag left or right to set where the slide starts"
+                        style={{ left: x0 + from * w, top: yBase - 5 }} {...handlers('start')} />}
+                    </>
+                  );
+                })()}
                 {marquee && <div className="marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
                 {loop && <div className={'loop-wash' + (loopOn ? '' : ' off')} style={{ left: loop.start * BEAT_W, width: (loop.end - loop.start) * BEAT_W }} />}
                 {!playing && startBeat > 0 && <div className="start-line" style={{ left: startBeat * BEAT_W }} />}
@@ -506,18 +531,37 @@ export function PianoRoll({ project, track, playhead, playing, startBeat, loop, 
                       <div className="menu-title">Slide this note</div>
                       <label className="slide-row">
                         <input type="range" min={-12} max={12} step={1} value={selectedNote.bend?.semitones ?? 0} aria-label="Slide amount in semitones"
-                          onChange={e => setBend(selectedNote, { semitones: +e.target.value, late: selectedNote.bend?.late }, `bend:${selectedNote.id}`)} />
+                          onChange={e => setBend(selectedNote, +e.target.value === 0 ? undefined : withSemitones(selectedNote.bend, +e.target.value), `bend:${selectedNote.id}`)} />
                         <span className="slide-readout">
                           {(selectedNote.bend?.semitones ?? 0) === 0 ? 'none' : `${selectedNote.bend!.semitones > 0 ? 'up' : 'down'} ${Math.abs(selectedNote.bend!.semitones)} ${Math.abs(selectedNote.bend!.semitones) === 1 ? 'step' : 'steps'}`}
                         </span>
                       </label>
-                      <Switch checked={!!selectedNote.bend?.late} onChange={v => selectedNote.bend && setBend(selectedNote, { ...selectedNote.bend, late: v || undefined })}>Hold first, then slide</Switch>
+                      <div className="timing" aria-disabled={!selectedNote.bend}>
+                        <div className="menu-title">When it slides</div>
+                        <label className="slide-row"><span className="timing-label">Starts</span>
+                          <input type="range" min={0} max={95} step={5} disabled={!selectedNote.bend} aria-label="Where the slide starts, as a percent of the note"
+                            value={Math.round((selectedNote.bend ? bendStart(selectedNote.bend) : 0) * 100)}
+                            onChange={e => selectedNote.bend && setBend(selectedNote, withTiming(selectedNote.bend, +e.target.value / 100, bendEnd(selectedNote.bend)), `bend:${selectedNote.id}`)} />
+                          <span className="slide-readout">{Math.round((selectedNote.bend ? bendStart(selectedNote.bend) : 0) * 100)}%</span>
+                        </label>
+                        <label className="slide-row"><span className="timing-label">Ends</span>
+                          <input type="range" min={5} max={100} step={5} disabled={!selectedNote.bend} aria-label="Where the slide ends, as a percent of the note"
+                            value={Math.round((selectedNote.bend ? bendEnd(selectedNote.bend) : 1) * 100)}
+                            onChange={e => selectedNote.bend && setBend(selectedNote, withTiming(selectedNote.bend, bendStart(selectedNote.bend), +e.target.value / 100), `bend:${selectedNote.id}`)} />
+                          <span className="slide-readout">{Math.round((selectedNote.bend ? bendEnd(selectedNote.bend) : 1) * 100)}%</span>
+                        </label>
+                        <div className="slide-presets" role="group" aria-label="Slide timing presets">
+                          {([['Whole note', 0, 1], ['Second half', 0.5, 1], ['Quick at the end', 0.75, 1], ['First half, then hold', 0, 0.5]] as const).map(([label, f, t]) => (
+                            <button key={label} className="pill" disabled={!selectedNote.bend} onClick={() => selectedNote.bend && setBend(selectedNote, withTiming(selectedNote.bend, f, t))}>{label}</button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="slide-actions">
                         <button className="btn small" disabled={slideToNext(selectedNote, track.notes) === null} title="Glide from this note into the next one"
-                          onClick={() => { const to = slideToNext(selectedNote, track.notes); if (to !== null) setBend(selectedNote, { semitones: to, late: selectedNote.bend?.late }); }}>Slide to next note</button>
+                          onClick={() => { const to = slideToNext(selectedNote, track.notes); if (to !== null) setBend(selectedNote, withSemitones(selectedNote.bend, to)); }}>Slide to next note</button>
                         {selectedNote.bend && <button className="btn small" onClick={() => setBend(selectedNote, undefined, undefined, false)}>Remove slide</button>}
                       </div>
-                      <p className="chord-hint">You can also drag the dot at the end of the note up or down.</p>
+                      <p className="chord-hint">You can also drag the dots on the note: the big one sets how far and where it ends, the small one where it starts.</p>
                     </div>
                   </Popover>
                 )}

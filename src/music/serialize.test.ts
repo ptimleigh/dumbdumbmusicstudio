@@ -59,10 +59,10 @@ describe('project files', () => {
   });
   it('remembers slides on notes', () => {
     const p = newProject();
-    p.tracks[0].notes.push({ id: 'n1', pitch: 60, start: 0, duration: 2, bend: { semitones: 5, late: true } });
+    p.tracks[0].notes.push({ id: 'n1', pitch: 60, start: 0, duration: 2, bend: { semitones: 5, from: 0.5 } });
     p.tracks[0].notes.push({ id: 'n2', pitch: 62, start: 2, duration: 1, bend: { semitones: 0 } });
     const back = parseProject(serializeProject(p)).tracks[0].notes;
-    expect(back[0].bend).toEqual({ semitones: 5, late: true });
+    expect(back[0].bend).toEqual({ semitones: 5, from: 0.5 });
     expect(back[1].bend).toBeUndefined();
   });
 });

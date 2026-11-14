@@ -35,7 +35,7 @@ person's own browser; nothing is uploaded anywhere.
 - `src/music/drums.ts`, `src/ui/DrumGrid.tsx` – drum step grid (drum hits are ordinary notes with General MIDI pitches).
 - `src/audio/recorder.ts`, `src/audio/wav.ts`, `src/ui/ExportDialog.tsx` – WAV export (plays once in real time while recording, then encodes 16-bit PCM).
 - `src/music/harmony.ts` – chords from the key, chord detection, "what comes next" suggestions, clash detection (pure, tested).
-- `src/music/bend.ts` – note slides (pitch glides up or down while a note plays); built-in synth ramps frequency, SoundFonts use MIDI pitch wheel events.
+- `src/music/bend.ts` – note slides (pitch glides up or down while a note plays, between a start and an end point inside the note); built-in synth ramps frequency, SoundFonts use MIDI pitch wheel events.
 - `src/music/edit.ts` – pure note-editing helpers: group move/resize, scale steps, copy/paste, box selection (tested).
 - `src/music/history.ts` – undo/redo (pure, tested).
 - `src/music/serialize.ts`, `src/storage.ts` – project files, autosave (localStorage) and SoundFont storage (IndexedDB).

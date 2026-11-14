@@ -435,3 +435,10 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
 /* mid-size windows: key, mood and length move into the settings button, and the wordmark shrinks to the logo */
 @media (max-width: 1320px) { .song-fields { display: none; } .song-popover { display: inline-flex; } }
 @media (max-width: 1000px) { .brand-name { display: none; } }
+
+.slide-handle.start { width: 10px; height: 10px; border-width: 2px; background: var(--c); border-color: #fff; cursor: ew-resize; }
+.timing { margin-top: 6px; }
+.timing[aria-disabled="true"] { opacity: .5; }
+.timing-label { min-width: 46px; color: var(--text-2); font-weight: 600; font-size: 13px; }
+.slide-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.slide-presets .pill:disabled { opacity: .5; cursor: default; }

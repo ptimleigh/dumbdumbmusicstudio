@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bendAt, cleanBend, clampSemitones, pitchWheelSteps, pitchWheelValue, slideToNext } from './bend';
+import { bendAt, bendEnd, bendStart, cleanBend, clampSemitones, pitchWheelSteps, pitchWheelValue, slideToNext, withSemitones, withTiming } from './bend';
 import type { Note } from './types';
 
 const n = (id: string, pitch: number, start: number, duration: number): Note => ({ id, pitch, start, duration });
@@ -45,10 +45,51 @@ describe('bend', () => {
   });
   it('cleans bad data from files', () => {
     expect(cleanBend({ semitones: 3 })).toEqual({ semitones: 3 });
-    expect(cleanBend({ semitones: 3, late: true })).toEqual({ semitones: 3, late: true });
+    expect(cleanBend({ semitones: 3, late: true })).toEqual({ semitones: 3, from: 0.5 }); // old files: late means start halfway
     expect(cleanBend({ semitones: 0 })).toBeUndefined();
     expect(cleanBend({ semitones: 'x' })).toBeUndefined();
     expect(cleanBend(null)).toBeUndefined();
     expect(cleanBend({ semitones: 99 })).toEqual({ semitones: 12 });
+  });
+
+  describe('start and end points', () => {
+    it('glides only between from and to, holding before and after', () => {
+      const b = { semitones: 8, from: 0.25, to: 0.75 };
+      expect(bendAt(b, 0)).toBe(0);
+      expect(bendAt(b, 0.25)).toBe(0);
+      expect(bendAt(b, 0.5)).toBe(4);
+      expect(bendAt(b, 0.75)).toBe(8);
+      expect(bendAt(b, 1)).toBe(8);   // holds the new pitch to the end of the note
+    });
+    it('defaults to the whole note', () => {
+      expect(bendStart({ semitones: 2 })).toBe(0);
+      expect(bendEnd({ semitones: 2 })).toBe(1);
+    });
+    it('never lets the glide get shorter than the minimum', () => {
+      expect(bendEnd({ semitones: 2, from: 0.5, to: 0.5 })).toBeCloseTo(0.55, 9);
+      expect(bendStart({ semitones: 2, from: 1 })).toBeCloseTo(0.95, 9);
+    });
+    it('snaps to the very start and end when close', () => {
+      expect(withTiming({ semitones: 3 }, 0.02, 0.98)).toEqual({ semitones: 3 });
+      expect(withTiming({ semitones: 3 }, 0.3, 0.6)).toEqual({ semitones: 3, from: 0.3, to: 0.6 });
+      expect(withTiming({ semitones: 3 }, 0.6, 0.3)).toEqual({ semitones: 3, from: 0.6, to: 0.65 });
+    });
+    it('keeps the timing when only the size changes', () => {
+      expect(withSemitones({ semitones: 2, from: 0.4, to: 0.9 }, 7)).toEqual({ semitones: 7, from: 0.4, to: 0.9 });
+      expect(withSemitones(undefined, 5)).toEqual({ semitones: 5 });
+    });
+    it('reads and cleans timing from files', () => {
+      expect(cleanBend({ semitones: 4, from: 0.2, to: 0.7 })).toEqual({ semitones: 4, from: 0.2, to: 0.7 });
+      expect(cleanBend({ semitones: 4, from: -5, to: 9 })).toEqual({ semitones: 4 });
+      expect(cleanBend({ semitones: 4, from: 'x', to: null })).toEqual({ semitones: 4 });
+    });
+    it('makes pitch wheel steps that rise only inside the glide', () => {
+      const steps = pitchWheelSteps({ semitones: 12, from: 0.5, to: 0.75 }, 1);
+      const at = (t: number) => steps.reduce((best, s) => (Math.abs(s.t - t) < Math.abs(best.t - t) ? s : best)).value;
+      expect(at(0.25)).toBe(8192);
+      expect(at(0.5)).toBe(8192);
+      expect(at(0.9)).toBe(16383);
+      expect(at(1)).toBe(16383);
+    });
   });
 });

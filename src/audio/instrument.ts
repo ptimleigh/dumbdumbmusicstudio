@@ -1,6 +1,6 @@
 import { midiToFreq } from '../music/theory';
 import type { Role } from '../music/types';
-import { bendStart, type NoteBend } from '../music/bend';
+import { bendEnd, bendStart, type NoteBend } from '../music/bend';
 
 /**
  * A sound source turns notes into audio. The built-in synth is the first
@@ -69,10 +69,11 @@ export class BuiltInSynth implements Instrument {
       o.type = p.type;
       o.frequency.setValueAtTime(freq, when);
       if (bend && bend.semitones !== 0) {
-        // hold the pitch until the slide starts, then glide to the target by the end of the note
+        // hold the pitch until the glide starts, glide to the new pitch, then hold it there
         const slideFrom = when + duration * bendStart(bend);
+        const slideTo = when + duration * bendEnd(bend);
         o.frequency.setValueAtTime(freq, slideFrom);
-        o.frequency.exponentialRampToValueAtTime(freq * Math.pow(2, bend.semitones / 12), Math.max(end, slideFrom + 0.01));
+        o.frequency.exponentialRampToValueAtTime(freq * Math.pow(2, bend.semitones / 12), Math.max(slideTo, slideFrom + 0.01));
       }
       o.detune.value = d;
       // the detuned copy is quieter so the two never cancel each other out completely
