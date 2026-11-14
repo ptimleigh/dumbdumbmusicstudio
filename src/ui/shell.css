@@ -117,7 +117,8 @@ kbd { font: 600 11px var(--font); color: var(--text-3); background: var(--surfac
 .switch:hover { color: var(--text); }
 
 /* ---------- track tabs ---------- */
-.tracks { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: thin; }
+.tracks-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tracks { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: thin; flex: 0 1 auto; min-width: 0; }
 .track-tab {
   display: inline-flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; flex: none;
   transition: border-color .15s var(--ease), background .15s var(--ease); position: relative; overflow: hidden;
@@ -132,6 +133,7 @@ kbd { font: 600 11px var(--font); color: var(--text-3); background: var(--surfac
 .tab-mute { width: 32px; height: 38px; border: 0; background: none; cursor: pointer; color: var(--text-3); display: grid; place-items: center; }
 .tab-mute:hover { color: var(--text); }
 .track-tab.muted .tab-mute { color: var(--danger); }
+.tracks-bar .popover { flex: none; }
 .add-track-btn { flex: none; }
 
 /* ---------- notices, welcome, toasts ---------- */
@@ -385,3 +387,9 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
 .view-panel { min-width: 300px; }
 .zoom span { min-width: 82px; }
 @media (max-width: 800px) { .zoom-fab { flex-direction: row; top: 36px; right: 8px; } .zoom-badge { padding: 0 6px; } }
+
+@media (max-width: 800px) {
+  .add-track-btn { padding: 0; width: 42px; }
+  .add-track-btn .lbl { display: none; }
+  .tracks { mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
+}

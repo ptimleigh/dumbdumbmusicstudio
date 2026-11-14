@@ -271,6 +271,7 @@ export function App() {
         </div>
       )}
 
+      <div className="tracks-bar">
       <div className="tracks" role="tablist" aria-label="Tracks">
         {project.tracks.map(t => (
           <div key={t.id} className={'track-tab' + (t.id === track.id ? ' active' : '') + (t.muted ? ' muted' : '')} style={{ ['--c' as string]: t.color }}>
@@ -283,7 +284,8 @@ export function App() {
             </button>
           </div>
         ))}
-        <Popover buttonClass="btn add-track-btn" trigger={<><Icon name="plus" size={16} />Add track</>} title="Add another track">
+      </div>
+        <Popover buttonClass="btn add-track-btn" align="end" label="Add track" trigger={<><Icon name="plus" size={16} /><span className="lbl">Add track</span></>} title="Add another track">
           {close => (
             <div role="menu">
               <div className="menu-title">Add a track</div>
