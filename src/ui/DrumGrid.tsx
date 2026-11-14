@@ -5,19 +5,22 @@ import { uid } from '../music/project';
 import { engine } from '../audio/engine';
 import { Icon, Popover, useElementWidth, ZoomControls } from './kit';
 import { useTimeZoom } from './useZoom';
+import { Ruler } from './Ruler';
+import type { Region } from '../audio/transport';
 
 const ROW_H = 34, LABEL_W = 104, RULER_H = 28;
 
 interface Gesture { gid: string; paint: boolean; cur: Note[]; last: string }
 
-export function DrumGrid({ project, track, playhead, onNotes }: {
-  project: Project; track: Track; playhead: number; onNotes: (n: Note[], key?: string) => void;
+export function DrumGrid({ project, track, playhead, playing, startBeat, loop, loopOn, onSeek, onLoop, onNotes }: {
+  project: Project; track: Track; playhead: number; playing: boolean; startBeat: number; loop: Region | null; loopOn: boolean;
+  onSeek: (beat: number) => void; onLoop: (r: Region | null) => void; onNotes: (n: Note[], key?: string) => void;
 }) {
   const total = project.bars * project.beatsPerBar;
   const steps = total * STEPS_PER_BEAT;
   const [scrollRef, areaWidth] = useElementWidth<HTMLDivElement>();
   // the song always fits the width of the screen; zooming magnifies it
-  const tz = useTimeZoom({ scrollRef, areaWidth, total, leftW: LABEL_W, minBeat: 40, maxBeat: 400, playhead, follow: true });
+  const tz = useTimeZoom({ scrollRef, areaWidth, total, leftW: LABEL_W, minBeat: 40, maxBeat: 400, playhead: playing ? playhead : 0, follow: true, focusBeat: startBeat });
   const BEAT_W = tz.beatW;
   const STEP_W = BEAT_W / STEPS_PER_BEAT;
   const gesture = useRef<Gesture | null>(null);
@@ -96,16 +99,8 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
       <div className="roll-main">
         <div className="roll-scroll" ref={scrollRef}>
           <div className="roll-inner" style={{ width: LABEL_W + steps * STEP_W }}>
-            <div className="ruler" style={{ height: RULER_H }}>
-              <div className="corner" style={{ width: LABEL_W }} />
-              <div className="ruler-track" style={{ width: steps * STEP_W }}>
-                {Array.from({ length: total }, (_, b) => {
-                  const bar = b % project.beatsPerBar === 0;
-                  return <div key={b} className={'tick' + (bar ? ' bar' : '')} style={{ left: b * BEAT_W }}>{bar && <span>{b / project.beatsPerBar + 1}</span>}</div>;
-                })}
-                {playhead > 0 && <div className="ruler-head" style={{ left: playhead * BEAT_W }} />}
-              </div>
-            </div>
+            <Ruler total={total} beatsPerBar={project.beatsPerBar} beatW={BEAT_W} leftW={LABEL_W} height={RULER_H} grid={0.25}
+              startBeat={startBeat} playing={playing} playhead={playhead} loop={loop} loopOn={loopOn} onSeek={onSeek} onLoop={onLoop} />
             <div className="roll-body">
               <div className="drum-labels" style={{ width: LABEL_W }}>
                 {DRUM_ROWS.map(r => (
@@ -118,12 +113,14 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
                 {Array.from({ length: Math.ceil(total / project.beatsPerBar) }, (_, b) => (
                   <div key={b} className="beat-line bar" style={{ left: b * project.beatsPerBar * BEAT_W }} />
                 ))}
-                {track.notes.map(n => {
+                {track.notes.filter(n => n.start < total).map(n => {
                   const row = DRUM_ROWS.findIndex(r => r.pitch === n.pitch);
                   if (row < 0) return null;
                   return <div key={n.id} className="drum-hit" style={{ left: n.start / STEP * STEP_W + 1.5, top: row * ROW_H + 3, width: STEP_W - 3, height: ROW_H - 6 }} />;
                 })}
-                {playhead > 0 && <div className="playhead" style={{ left: playhead * BEAT_W }} />}
+                {loop && <div className={'loop-wash' + (loopOn ? '' : ' off')} style={{ left: loop.start * BEAT_W, width: (loop.end - loop.start) * BEAT_W }} />}
+                {!playing && startBeat > 0 && <div className="start-line" style={{ left: startBeat * BEAT_W }} />}
+                {playing && <div className="playhead" style={{ left: playhead * BEAT_W }} />}
               </div>
             </div>
           </div>

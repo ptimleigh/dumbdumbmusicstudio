@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Icon } from './kit';
 
 const GROUPS: { title: string; rows: [string[], string][] }[] = [
-  { title: 'Playing', rows: [[['Space'], 'Play or stop'], [['Ctrl', 'Z'], 'Undo'], [['Ctrl', 'Shift', 'Z'], 'Redo']] },
+  { title: 'Playing and looping', rows: [[['Space'], 'Play or stop. Play starts at the flag on the ruler'], [['L'], 'Loop on or off'], [['Home'], 'Move the start back to the beginning'], [['Ctrl', 'Z'], 'Undo'], [['Ctrl', 'Shift', 'Z'], 'Redo']] },
   { title: 'Zooming in', rows: [
     [['Ctrl', 'scroll'], 'Zoom the timeline at your cursor (pinch on a trackpad or phone)'],
     [['Ctrl', 'Shift', 'scroll'], 'Make the note rows taller or shorter'],

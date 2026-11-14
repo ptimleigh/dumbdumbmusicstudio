@@ -8,6 +8,8 @@ import { engine } from '../audio/engine';
 import { uid } from '../music/project';
 import { Icon, Popover, Segmented, Slider, Switch, useElementWidth, ZoomControls } from './kit';
 import { useTimeZoom } from './useZoom';
+import { Ruler } from './Ruler';
+import type { Region } from '../audio/transport';
 
 const LOW = 48, HIGH = 84; // C3..C6
 const KEYS_W = 52, RULER_H = 28, HANDLE = 7;
@@ -30,8 +32,9 @@ interface Drag {
 }
 interface Marquee { x0: number; y0: number; x1: number; y1: number; additive: boolean; before: ReadonlySet<string> }
 
-export function PianoRoll({ project, track, playhead, onNotes }: {
-  project: Project; track: Track; playhead: number; onNotes: (n: Note[], key?: string) => void;
+export function PianoRoll({ project, track, playhead, playing, startBeat, loop, loopOn, onSeek, onLoop, onNotes }: {
+  project: Project; track: Track; playhead: number; playing: boolean; startBeat: number; loop: Region | null; loopOn: boolean;
+  onSeek: (beat: number) => void; onLoop: (r: Region | null) => void; onNotes: (n: Note[], key?: string) => void;
 }) {
   const [duration, setDuration] = useState(1);
   const [lock, setLock] = useState(true);
@@ -53,7 +56,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
 
   // the song always fits the width of the screen; zooming magnifies it
   const tz = useTimeZoom({
-    scrollRef, areaWidth, total, leftW: KEYS_W, minBeat: MIN_BEAT, maxBeat: MAX_BEAT, playhead, follow,
+    scrollRef, areaWidth, total, leftW: KEYS_W, minBeat: MIN_BEAT, maxBeat: MAX_BEAT, playhead: playing ? playhead : 0, follow, focusBeat: startBeat,
     onHeightZoom: factor => changeRowH(rowHRef.current * factor),
   });
   const BEAT_W = tz.beatW;
@@ -79,8 +82,10 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
   }, [rowH, scrollRef]);
 
   // only notes that still exist count as selected (after undo, delete, or switching tracks)
-  const selIds = new Set(track.notes.filter(n => selected.has(n.id)).map(n => n.id));
-  const selNotes = track.notes.filter(n => selIds.has(n.id));
+  // notes past the end of the song (after shortening it) are kept but not shown, and come back if the song is lengthened
+  const visibleNotes = track.notes.filter(n => n.start < total);
+  const selIds = new Set(visibleNotes.filter(n => selected.has(n.id)).map(n => n.id));
+  const selNotes = visibleNotes.filter(n => selIds.has(n.id));
   const selectedNote = selNotes.length === 1 ? selNotes[0] : null; // slide controls work on one note at a time
   const rows: number[] = [];
   for (let p = HIGH; p >= LOW; p--) rows.push(p);
@@ -230,6 +235,13 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     if (d && d.last !== d.from) engine.preview(track, d.note.pitch, Math.min(1.5, d.note.duration * secPerBeat), d.last ? { semitones: d.last, late: d.note.bend?.late } : undefined);
   }
 
+  /** Mark the stretch of the song that holds the selected notes as the loop section, rounded out to whole beats. */
+  function loopSelection() {
+    const b = selectionBounds(track.notes, selIds);
+    if (!b) return;
+    onLoop({ start: Math.floor(b.start), end: Math.min(total, Math.ceil(b.end)) });
+  }
+
   function zoomToSelection() {
     const b = selectionBounds(track.notes, selIds);
     const el = scrollRef.current;
@@ -241,7 +253,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
 
   const removeNote = (id: string) => { setSelected(new Set()); onNotes(track.notes.filter(x => x.id !== id)); };
   const removeSelected = () => { setSelected(new Set()); onNotes(track.notes.filter(x => !selIds.has(x.id))); };
-  const selectAll = () => setSelected(new Set(track.notes.map(n => n.id)));
+  const selectAll = () => setSelected(new Set(visibleNotes.map(n => n.id)));
 
   /** Moves the selection by whole steps: time in beats, pitch in rows (scale steps when "Stay in key" is on). */
   function nudge(dBeats: number, rows: number, octave = false) {
@@ -400,18 +412,8 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
       <div className="roll-main">
         <div className="roll-scroll" ref={scrollRef}>
           <div className="roll-inner" style={{ width: KEYS_W + gridW }}>
-            <div className="ruler" style={{ height: RULER_H }}>
-              <div className="corner" style={{ width: KEYS_W }} />
-              <div className="ruler-track" style={{ width: gridW }}>
-                {GRID * BEAT_W >= 8 && <div className="snap-ticks" style={{ ['--snap-w' as string]: `${GRID * BEAT_W}px` }} />}
-                {Array.from({ length: total }, (_, b) => {
-                  const bar = b % project.beatsPerBar === 0;
-                  const label = bar ? String(b / project.beatsPerBar + 1) : BEAT_W >= 64 ? `${b / project.beatsPerBar + 1 | 0}.${(b % project.beatsPerBar) + 1}` : '';
-                  return <div key={b} className={'tick' + (bar ? ' bar' : '')} style={{ left: b * BEAT_W }}>{label && <span className={bar ? '' : 'sub'}>{label}</span>}</div>;
-                })}
-                {playhead > 0 && <div className="ruler-head" style={{ left: playhead * BEAT_W }} />}
-              </div>
-            </div>
+            <Ruler total={total} beatsPerBar={project.beatsPerBar} beatW={BEAT_W} leftW={KEYS_W} height={RULER_H} grid={GRID}
+              startBeat={startBeat} playing={playing} playhead={playhead} loop={loop} loopOn={loopOn} onSeek={onSeek} onLoop={onLoop} />
             <div className="roll-body">
               <div className="keys" style={{ width: KEYS_W }}>
                 {rows.map(p => (
@@ -427,14 +429,14 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
                 {Array.from({ length: total }, (_, b) => (
                   <div key={b} className={'beat-line' + (b % project.beatsPerBar === 0 ? ' bar' : '')} style={{ left: b * BEAT_W }} />
                 ))}
-                {showGhosts && others.flatMap(t => t.notes.filter(n => n.pitch >= LOW && n.pitch <= HIGH).map(n => (
+                {showGhosts && others.flatMap(t => t.notes.filter(n => n.pitch >= LOW && n.pitch <= HIGH && n.start < total).map(n => (
                   <div key={t.id + n.id} className="ghost"
                     style={{ left: n.start * BEAT_W, top: (HIGH - n.pitch) * ROW_H, width: n.duration * BEAT_W - 1, height: ROW_H - 2, ['--c' as string]: t.color }} />
                 )))}
-                {track.notes.map(n => (
+                {visibleNotes.map(n => (
                   <div key={n.id} className={'note' + (selIds.has(n.id) ? ' selected' : '') + (clashes.has(n.id) ? ' clash' : '')}
                     title={clashes.has(n.id) ? `Clashes with ${noteName(clashes.get(n.id)!.otherPitch)} on ${clashes.get(n.id)!.otherTrack}. Try moving it one step.` : 'Drag the edges to resize, drag the middle to move. Shift-click to select more. Press Delete to remove'}
-                    style={{ left: n.start * BEAT_W, top: (HIGH - n.pitch) * ROW_H, width: Math.max(4, n.duration * BEAT_W - 1), height: ROW_H - 2 }}
+                    style={{ left: n.start * BEAT_W, top: (HIGH - n.pitch) * ROW_H, width: Math.max(4, Math.min(n.duration, total - n.start) * BEAT_W - 1), height: ROW_H - 2 }}
                     onPointerDown={e => startDrag(e, n)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
                     onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
                     onDoubleClick={e => { e.stopPropagation(); if (lastPointer.current === 'mouse') removeNote(n.id); }}
@@ -457,7 +459,9 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
                     onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} />
                 )}
                 {marquee && <div className="marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
-                {playhead > 0 && <div className="playhead" style={{ left: playhead * BEAT_W }} />}
+                {loop && <div className={'loop-wash' + (loopOn ? '' : ' off')} style={{ left: loop.start * BEAT_W, width: (loop.end - loop.start) * BEAT_W }} />}
+                {!playing && startBeat > 0 && <div className="start-line" style={{ left: startBeat * BEAT_W }} />}
+                {playing && <div className="playhead" style={{ left: playhead * BEAT_W }} />}
               </div>
             </div>
           </div>
@@ -465,7 +469,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
 
         {message && <div className="roll-toast" role="status">{message}</div>}
 
-        {track.notes.length === 0 && (
+        {visibleNotes.length === 0 && (
           <div className="empty-hint" aria-hidden="true">
             <Icon name="pencil" size={22} />
             <strong>Click anywhere on the grid to add your first note</strong>
@@ -490,6 +494,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
                   <button className="btn-text" onClick={() => nudge(0, -1, true)} title="An octave lower (Shift+↓)">Octave ↓</button>
                 </span>
                 <span className="sel-group">
+                  <button className="btn-icon" onClick={loopSelection} title="Loop these notes: play just this part over and over" aria-label="Loop these notes"><Icon name="loop" /></button>
                   <button className="btn-icon" onClick={repeatSelection} title="Copy these notes and place the copy right after them (Ctrl+D)" aria-label="Repeat"><Icon name="repeat" /></button>
                   <button className="btn-icon" onClick={copySelection} title="Copy (Ctrl+C)" aria-label="Copy"><Icon name="copy" /></button>
                   <button className="btn-icon" onClick={zoomToSelection} title="Zoom in on the selected notes" aria-label="Zoom to selection"><Icon name="zoomIn" /></button>

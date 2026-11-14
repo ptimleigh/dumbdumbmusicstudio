@@ -407,3 +407,31 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
 
 .lbl-short { display: none; }
 @media (max-width: 800px) { .lbl-full { display: none; } .lbl-short { display: inline; } }
+
+/* ---------- start marker and loop section ---------- */
+.ruler-track { cursor: pointer; touch-action: none; user-select: none; }
+.loop-btn { position: relative; width: 34px; height: 34px; }
+.loop-btn[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+.loop-btn[aria-pressed="true"]:hover { background: var(--accent); filter: brightness(1.06); }
+.loop-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-ink); box-shadow: 0 0 0 2px var(--accent); }
+.loop-btn[aria-pressed="true"] .loop-dot { background: var(--accent-ink); box-shadow: 0 0 0 1.5px var(--accent); }
+.loop-band { position: absolute; top: 0; bottom: 0; z-index: 1; background: color-mix(in srgb, var(--accent) 26%, transparent); border-top: 3px solid var(--accent); }
+.loop-band.off { background: color-mix(in srgb, var(--text-3) 18%, transparent); border-top-color: var(--text-3); }
+.loop-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; }
+.loop-handle.left { left: -4px; } .loop-handle.right { right: -4px; }
+.loop-handle::after { content: ''; position: absolute; top: 5px; bottom: 5px; left: 4px; width: 2px; border-radius: 2px; background: var(--accent-text); }
+.loop-clear { position: absolute; right: 8px; top: 4px; width: 18px; height: 18px; border-radius: 50%; border: 0; background: var(--surface-3); color: var(--text-2); font-size: 13px; line-height: 1; cursor: pointer; padding: 0; display: grid; place-items: center; }
+.loop-clear:hover { background: var(--text); color: var(--bg); }
+.start-flag { position: absolute; bottom: 0; width: 0; height: 0; margin-left: -1px; border-left: 2px solid var(--accent); height: 100%; z-index: 2; pointer-events: none; }
+.start-flag::before { content: ''; position: absolute; top: 0; left: -1px; width: 12px; height: 11px; background: var(--accent); clip-path: polygon(0 0, 100% 0, 60% 50%, 100% 100%, 0 100%); }
+.loop-wash { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none; background: color-mix(in srgb, var(--accent) 7%, transparent); border-left: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-right: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.loop-wash.off { background: color-mix(in srgb, var(--text-3) 6%, transparent); border-color: color-mix(in srgb, var(--text-3) 35%, transparent); }
+.start-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--accent); opacity: .7; pointer-events: none; z-index: 3; }
+@media (pointer: coarse) { .loop-handle { width: 22px; } .loop-handle.left { left: -10px; } .loop-handle.right { right: -10px; } }
+
+/* the help, shortcuts and theme icons also live in the File menu, so they make room on narrower windows */
+@media (max-width: 1500px) { .hide-md { display: none; } }
+
+/* mid-size windows: key, mood and length move into the settings button, and the wordmark shrinks to the logo */
+@media (max-width: 1320px) { .song-fields { display: none; } .song-popover { display: inline-flex; } }
+@media (max-width: 1000px) { .brand-name { display: none; } }

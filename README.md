@@ -30,6 +30,7 @@ person's own browser; nothing is uploaded anywhere.
 - `src/audio/soundfont.ts` – SoundFont (SF2/SF3/DLS) instrument. One synth per track so each track keeps its own effect chain.
 - `src/audio/macros.ts` – pure mapping from friendly 0–10 sliders to real DSP parameters (tested).
 - `src/audio/macros.ts` also holds the one-click sound styles (Vibes).
+- `src/audio/transport.ts` – playback position, start points and loop regions as pure functions (tested). The engine plays from any beat and can loop a section.
 - `src/audio/engine.ts` – Web Audio engine: look-ahead scheduler + per-track effect chain.
 - `src/music/drums.ts`, `src/ui/DrumGrid.tsx` – drum step grid (drum hits are ordinary notes with General MIDI pitches).
 - `src/audio/recorder.ts`, `src/audio/wav.ts`, `src/ui/ExportDialog.tsx` – WAV export (plays once in real time while recording, then encodes 16-bit PCM).

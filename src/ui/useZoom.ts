@@ -16,6 +16,7 @@ export function useTimeZoom(o: {
   maxBeat: number;        // widest a beat may get, in px
   playhead: number;       // in beats, 0 when stopped
   follow: boolean;
+  focusBeat?: number;     // the start marker: scrolled back into view when playback stops
   onHeightZoom?: (factor: number) => void; // Ctrl+Shift+scroll
 }) {
   const { scrollRef, areaWidth, total, leftW, minBeat, maxBeat } = o;
@@ -116,6 +117,18 @@ export function useTimeZoom(o: {
     const left = el.scrollLeft, right = el.scrollLeft + el.clientWidth - leftW;
     if (x > right - 48 || x < left) el.scrollLeft = Math.max(0, x - 80);
   }, [o.playhead, o.follow, beatW, leftW, scrollRef]);
+
+  // when playback stops, bring the start marker back into view
+  const wasPlaying = useRef(false);
+  useEffect(() => {
+    const playing = o.playhead > 0;
+    const el = scrollRef.current;
+    if (wasPlaying.current && !playing && o.follow && el && o.focusBeat !== undefined) {
+      const x = o.focusBeat * beatW;
+      if (x < el.scrollLeft || x > el.scrollLeft + el.clientWidth - leftW - 24) el.scrollLeft = Math.max(0, x - 80);
+    }
+    wasPlaying.current = playing;
+  }, [o.playhead > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { beatW, zoom, maxZoom, zoomTo, zoomBy, reset, zoomToSpan, atFit: zoom <= 1.001 };
 }

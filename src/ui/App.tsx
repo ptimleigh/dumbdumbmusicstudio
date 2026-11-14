@@ -13,6 +13,7 @@ import { Welcome } from './Welcome';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { Icon, LogoMark, MenuItem, MenuSeparator, Popover, Toasts, type Toast } from './kit';
 import { useTheme } from './useTheme';
+import { normalizeRegion, type Region } from '../audio/transport';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
@@ -24,6 +25,9 @@ export function App() {
   const [activeId, setActiveId] = useState(project.tracks[0].id);
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
+  const [startBeat, setStartBeat] = useState(0);            // where Play begins (set by clicking the ruler)
+  const [loopOn, setLoopOn] = useState(true);               // repeat, or play once and stop
+  const [loopRegion, setLoopRegion] = useState<Region | null>(null); // a marked section to loop instead of the whole song
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [sfError, setSfError] = useState<string | null>(null);
   const [notices, setNotices] = useState<string[]>([]);
@@ -57,12 +61,28 @@ export function App() {
 
   const track = project.tracks.find(t => t.id === activeId) ?? project.tracks[0];
 
+  // keep the marker and loop section inside the song if its length changes
+  const total = project.bars * project.beatsPerBar;
+  const region = normalizeRegion(loopRegion, total);
+  const start = Math.min(startBeat, total);
+  const activeLoop: Region | null = loopOn ? (region ?? { start: 0, end: total }) : null;
+  // Play reads these, so it always uses the latest choice even right after a click
+  const startRef = useRef(start); startRef.current = start;
+  const loopRef = useRef(activeLoop); loopRef.current = activeLoop;
+
   useEffect(() => {
     let raf = 0;
-    const loop = () => { setPlayhead(engine.position()); raf = requestAnimationFrame(loop); };
+    const loop = () => {
+      setPlayhead(engine.position());
+      if (!engine.playing) { setPlaying(false); return; } // the song reached its end (when not looping)
+      raf = requestAnimationFrame(loop);
+    };
     if (playing) raf = requestAnimationFrame(loop); else setPlayhead(0);
     return () => cancelAnimationFrame(raf);
   }, [playing]);
+
+  // changing the loop while playing takes effect straight away
+  useEffect(() => { if (engine.playing) engine.setLoop(activeLoop); }, [loopOn, region?.start, region?.end, total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,6 +91,8 @@ export function App() {
       const typing = tag === 'TEXTAREA' || (tag === 'INPUT' && (e.target as HTMLInputElement).type === 'text');
       if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
+      if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && tag !== 'SELECT' && e.code === 'KeyL') { e.preventDefault(); setLoopOn(v => !v); return; }
+      if (!typing && tag !== 'SELECT' && e.code === 'Home') { e.preventDefault(); seek(0); return; }
       if (e.code === 'Space' && !exporting && (e.target as HTMLElement).tagName !== 'SELECT' && (e.target as HTMLElement).tagName !== 'INPUT') {
         e.preventDefault(); togglePlay();
       }
@@ -111,6 +133,7 @@ export function App() {
 
   function openProject(p: Project) {
     engine.stop(); setPlaying(false);
+    setStartBeat(0); setLoopRegion(null);
     engine.resetAll();
     setHist(initHistory(p));
     projectRef.current = p;
@@ -147,9 +170,21 @@ export function App() {
     closeWelcome();
   }
 
+  /** Choose where playback starts; jumps there straight away if already playing. */
+  function seek(beat: number) {
+    startRef.current = beat;
+    setStartBeat(beat);
+    if (engine.playing) engine.seek(beat);
+  }
+  /** Mark a section of the song to loop (null clears it). */
+  function markLoop(r: Region | null) {
+    setLoopRegion(r);
+    if (r) { setLoopOn(true); if (!engine.playing) { startRef.current = r.start; setStartBeat(r.start); } } // Play then starts at the section
+  }
+
   async function togglePlay() {
     if (engine.playing) { engine.stop(); setPlaying(false); }
-    else { await engine.play(); setPlaying(true); }
+    else { await engine.play({ from: startRef.current, loop: loopRef.current }); setPlaying(true); }
   }
 
   const patch = (p: Partial<Project>, key?: string) => setProject(prev => ({ ...prev, ...p }), { key });
@@ -213,6 +248,10 @@ export function App() {
           <button className="play-btn" onClick={togglePlay} aria-pressed={playing} aria-label={playing ? 'Stop' : 'Play'} title={playing ? 'Stop (Space)' : 'Play (Space)'}>
             <Icon name={playing ? 'stop' : 'play'} size={22} />
           </button>
+          <button className="btn-icon loop-btn" onClick={() => setLoopOn(v => !v)} aria-pressed={loopOn} aria-label="Loop"
+            title={loopOn ? (region ? 'Looping the section you marked on the ruler (L)' : 'Looping the whole song (L)') : 'Loop is off: the song plays once (L)'}>
+            <Icon name="loop" size={19} />{loopOn && region && <span className="loop-dot" />}
+          </button>
           <div className="stepper" role="group" aria-label="Speed">
             <button className="btn-icon" onClick={() => patch({ tempo: Math.max(60, project.tempo - 1) }, 'tempo')} aria-label="Slower" title="Slower"><Icon name="left" size={16} /></button>
             <Popover buttonClass="tempo-btn" title="Change the speed" align="center" label={`Speed ${project.tempo} beats per minute`}
@@ -254,9 +293,9 @@ export function App() {
               </div>
             )}
           </Popover>
-          <button className="btn-icon hide-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><Icon name="keyboard" /></button>
-          <button className="btn-icon hide-sm" onClick={() => setShowWelcome(v => !v)} aria-pressed={showWelcome} title="Show or hide the getting-started tips" aria-label="Help"><Icon name="help" /></button>
-          <button className="btn-icon hide-sm" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to the light look' : 'Switch to the dark look'} aria-label="Switch between light and dark"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
+          <button className="btn-icon hide-sm hide-md" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><Icon name="keyboard" /></button>
+          <button className="btn-icon hide-sm hide-md" onClick={() => setShowWelcome(v => !v)} aria-pressed={showWelcome} title="Show or hide the getting-started tips" aria-label="Help"><Icon name="help" /></button>
+          <button className="btn-icon hide-sm hide-md" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to the light look' : 'Switch to the dark look'} aria-label="Switch between light and dark"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
         </div>
         <input ref={openRef} type="file" accept=".json,application/json" hidden
           onChange={e => { const f = e.target.files?.[0]; if (f) void onOpenFile(f); e.target.value = ''; }} />
@@ -299,13 +338,19 @@ export function App() {
 
       <main className="workspace">
         {track.role === 'drums' ? (
-          <DrumGrid project={project} track={track} playhead={playhead}
+          <DrumGrid project={project} track={track} playhead={playhead} playing={playing} startBeat={start} loop={region} loopOn={loopOn} onSeek={seek} onLoop={markLoop}
             onNotes={(notes, key) => patchTrack(track.id, t => ({ ...t, notes }), { key })} />
         ) : (
           <PianoRoll
             project={project}
             track={track}
             playhead={playhead}
+            playing={playing}
+            startBeat={start}
+            loop={region}
+            loopOn={loopOn}
+            onSeek={seek}
+            onLoop={markLoop}
             onNotes={(notes, key) => patchTrack(track.id, t => ({ ...t, notes }), { key })}
           />
         )}
