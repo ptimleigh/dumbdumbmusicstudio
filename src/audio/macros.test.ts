@@ -35,3 +35,22 @@ describe('loudness compensation', () => {
     expect(macrosToDsp({ warmth: 5, punch: 10, space: 5 }).presenceDb).toBeGreaterThan(0);
   });
 });
+
+import { matchingVibe, VIBES } from './macros';
+
+describe('vibes', () => {
+  it('keeps every slider inside 0 to 10 and every id unique', () => {
+    expect(new Set(VIBES.map(v => v.id)).size).toBe(VIBES.length);
+    for (const v of VIBES) for (const k of ['warmth', 'punch', 'space'] as const) {
+      expect(v.macros[k]).toBeGreaterThanOrEqual(0);
+      expect(v.macros[k]).toBeLessThanOrEqual(10);
+    }
+  });
+  it('starts with the plain setting every new track uses', () => {
+    expect(VIBES[0].macros).toEqual({ warmth: 5, punch: 5, space: 5 });
+  });
+  it('recognizes which vibe the sliders are on', () => {
+    expect(matchingVibe({ warmth: 7, punch: 2, space: 9 })?.id).toBe('dreamy');
+    expect(matchingVibe({ warmth: 7, punch: 2, space: 8 })).toBeNull();
+  });
+});

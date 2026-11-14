@@ -13,6 +13,7 @@ export interface TrackChain {
   dry: GainNode;
   reverbSend: GainNode;
   out: GainNode;
+  panner: StereoPannerNode;
 }
 
 export function makeImpulse(ctx: BaseAudioContext, seconds = 2.8, decay = 1.8): AudioBuffer {
@@ -51,16 +52,17 @@ export function createTrackChain(ctx: BaseAudioContext, master: AudioNode, rever
   const dry = ctx.createGain();
   const out = ctx.createGain();
   const reverbSend = ctx.createGain();
+  const panner = ctx.createStereoPanner();
   input.connect(low); low.connect(high); high.connect(presence); presence.connect(shaper);
   shaper.connect(comp); comp.connect(makeup);
-  makeup.connect(dry); dry.connect(out); out.connect(master);
+  makeup.connect(dry); dry.connect(out); out.connect(panner); panner.connect(master);
   makeup.connect(reverbSend); reverbSend.connect(reverb);
-  return { input, low, high, presence, shaper, comp, makeup, dry, reverbSend, out };
+  return { input, low, high, presence, shaper, comp, makeup, dry, reverbSend, out, panner };
 }
 
 const db = (x: number) => Math.pow(10, x / 20);
 
-export function applyDsp(ctx: BaseAudioContext, c: TrackChain, d: DspParams, volume: number, muted: boolean, immediate = false) {
+export function applyDsp(ctx: BaseAudioContext, c: TrackChain, d: DspParams, volume: number, muted: boolean, immediate = false, pan = 0) {
   const t = ctx.currentTime;
   const set = (p: AudioParam, v: number) => immediate ? (p.value = v) : p.setTargetAtTime(v, t, 0.02);
   set(c.low.gain, d.lowShelfDb);
@@ -74,7 +76,8 @@ export function applyDsp(ctx: BaseAudioContext, c: TrackChain, d: DspParams, vol
   set(c.dry.gain, d.dryLevel);
   set(c.reverbSend.gain, d.reverbMix);
   set(c.out.gain, muted ? 0 : volume);
+  set(c.panner.pan, Math.max(-1, Math.min(1, pan)));
 }
 
-export const applyMacros = (ctx: BaseAudioContext, c: TrackChain, m: Macros, volume = 1, muted = false, immediate = false) =>
-  applyDsp(ctx, c, macrosToDsp(m), volume, muted, immediate);
+export const applyMacros = (ctx: BaseAudioContext, c: TrackChain, m: Macros, volume = 1, muted = false, immediate = false, pan = 0) =>
+  applyDsp(ctx, c, macrosToDsp(m), volume, muted, immediate, pan);

@@ -48,4 +48,21 @@ describe('project files', () => {
     const bad = JSON.parse(serializeProject(p)); bad.project.tracks[0].voice = 'nope';
     expect(parseProject(JSON.stringify(bad)).tracks[0].voice).toBeUndefined();
   });
+  it('remembers a track\'s position and ignores bad values', () => {
+    const p = newProject();
+    p.tracks[0].pan = -0.4;
+    expect(parseProject(serializeProject(p)).tracks[0].pan).toBe(-0.4);
+    const bad = JSON.parse(serializeProject(p)); bad.project.tracks[0].pan = 9;
+    expect(parseProject(JSON.stringify(bad)).tracks[0].pan).toBe(1);
+    bad.project.tracks[0].pan = 0;
+    expect(parseProject(JSON.stringify(bad)).tracks[0].pan).toBeUndefined();
+  });
+  it('remembers slides on notes', () => {
+    const p = newProject();
+    p.tracks[0].notes.push({ id: 'n1', pitch: 60, start: 0, duration: 2, bend: { semitones: 5, late: true } });
+    p.tracks[0].notes.push({ id: 'n2', pitch: 62, start: 2, duration: 1, bend: { semitones: 0 } });
+    const back = parseProject(serializeProject(p)).tracks[0].notes;
+    expect(back[0].bend).toEqual({ semitones: 5, late: true });
+    expect(back[1].bend).toBeUndefined();
+  });
 });

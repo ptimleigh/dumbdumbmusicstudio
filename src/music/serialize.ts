@@ -51,6 +51,7 @@ function parseTrack(raw: any): Track | null {
     sound,
     voice: VOICE_IDS.includes(raw.voice) ? (raw.voice as VoiceId) : undefined,
     volume: num(raw.volume, 0, 1, 0.8),
+    ...(num(raw.pan, -1, 1, 0) !== 0 ? { pan: num(raw.pan, -1, 1, 0) } : {}),
     muted: raw.muted === true,
   };
 }

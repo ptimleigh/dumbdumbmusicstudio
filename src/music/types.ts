@@ -41,6 +41,7 @@ export interface Track {
   /** Which built-in sound a melodic track uses when it has no SoundFont. Defaults by role. */
   voice?: VoiceId;
   volume: number; // 0..1
+  pan?: number;   // -1 (left) .. 1 (right), default 0
   muted: boolean;
 }
 

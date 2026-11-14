@@ -29,6 +29,12 @@ export function App() {
   const [showWelcome, setShowWelcome] = useState(() => {
     try { return localStorage.getItem('dumbdumb.welcomeSeen') !== '1'; } catch { return true; }
   });
+  // after a sound change, play a short sample so the change can be heard without pressing Play
+  const auditionTimer = useRef<number | undefined>(undefined);
+  const scheduleAudition = (trackId: string, delay = 350) => {
+    window.clearTimeout(auditionTimer.current);
+    auditionTimer.current = window.setTimeout(() => { void engine.audition(projectRef.current, trackId); }, delay);
+  };
   const closeWelcome = () => {
     setShowWelcome(false);
     try { localStorage.setItem('dumbdumb.welcomeSeen', '1'); } catch { /* ignore */ }
@@ -259,8 +265,11 @@ export function App() {
           onLoadFile={loadSoundFont}
           onPreset={choosePreset}
           onBuiltIn={useBuiltIn}
-          onMacro={(k: keyof Macros, v: number) => { patchTrack(track.id, t => ({ ...t, macros: { ...t.macros, [k]: v } }), { key: `macro:${track.id}:${k}` }); }}
-          onVolume={v => patchTrack(track.id, t => ({ ...t, volume: v }), { key: `volume:${track.id}` })}
+          onMacro={(k: keyof Macros, v: number) => { patchTrack(track.id, t => ({ ...t, macros: { ...t.macros, [k]: v } }), { key: `macro:${track.id}:${k}` }); scheduleAudition(track.id); }}
+          onVibe={m => { patchTrack(track.id, t => ({ ...t, macros: { ...m } })); scheduleAudition(track.id, 150); }}
+          onPan={v => { patchTrack(track.id, t => ({ ...t, pan: v === 0 ? undefined : v }), { key: `pan:${track.id}` }); scheduleAudition(track.id); }}
+          onCompare={on => { engine.setBypass(track, on); window.clearTimeout(auditionTimer.current); if (!engine.playing) void engine.audition(projectRef.current, track.id); }}
+          onVolume={v => { patchTrack(track.id, t => ({ ...t, volume: v }), { key: `volume:${track.id}` }); scheduleAudition(track.id); }}
           onMute={m => patchTrack(track.id, t => ({ ...t, muted: m }))}
           onRename={name => patchTrack(track.id, t => ({ ...t, name }), { key: `rename:${track.id}` })}
           onClear={() => patchTrack(track.id, t => ({ ...t, notes: [] }))}

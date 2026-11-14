@@ -1,4 +1,5 @@
-import type { Project, SoundFontPreset, Track } from '../music/types';
+import type { Macros, Project, SoundFontPreset, Track } from '../music/types';
+import { triadPitches } from '../music/harmony';
 import { SoundFontInstrument } from './soundfont';
 import { createRecorderNode } from './recorder';
 import type { NoteBend } from '../music/bend';
@@ -21,6 +22,7 @@ export class Engine {
   private scheduledUpTo = 0;  // beats
   playing = false;
   private loop = true;
+  private bypassed = new Set<string>();
 
   getProject: () => Project = () => { throw new Error('getProject not set'); };
 
@@ -52,7 +54,44 @@ export class Engine {
     const ctx = this.ensure();
     const et = this.chainFor(track);
     if (et.instrument instanceof BuiltInSynth && track.role !== 'drums') et.instrument.setVoice(track.voice ?? DEFAULT_VOICE[track.role]);
-    applyMacros(ctx, et.chain, track.macros, track.volume, track.muted);
+    // while a track is being compared, play it with every effect off (Space at 0 is fully dry)
+    const macros: Macros = this.bypassed.has(track.id) ? { warmth: 5, punch: 5, space: 0 } : track.macros;
+    applyMacros(ctx, et.chain, macros, track.volume, track.muted, false, track.pan ?? 0);
+  }
+
+  /** Turns all of a track's sound effects off or on, for comparing before and after. */
+  setBypass(track: Track, on: boolean) {
+    if (on) this.bypassed.add(track.id); else this.bypassed.delete(track.id);
+    this.applyTrackSettings(track);
+  }
+
+  /**
+   * Plays the first few beats of a track once, so a change to its sound can be heard without pressing Play.
+   * An empty track plays a short example in the song's key instead.
+   */
+  async audition(project: Project, trackId: string) {
+    const track = project.tracks.find(t => t.id === trackId);
+    if (!track || this.playing) return;
+    const ctx = this.ensure();
+    if (ctx.state === 'suspended') await ctx.resume();
+    this.applyTrackSettings(track);
+    const inst = this.chainFor(track);
+    const spb = 60 / project.tempo;
+    const horizon = Math.min(4, project.bars * project.beatsPerBar);
+    let notes = track.notes.filter(n => n.start < horizon);
+    if (notes.length === 0) {
+      if (track.role === 'drums') {
+        notes = [36, 42, 38, 42, 36, 42, 38, 42].map((pitch, i) => ({ id: 'a' + i, pitch, start: i * 0.5, duration: 0.25 }));
+      } else {
+        const base = track.role === 'bass' ? 48 : 60;
+        const [r, t, f] = triadPitches(0, project.key, project.scaleName, base);
+        notes = [[r, 0, 0.5], [t, 0.5, 0.5], [f, 1, 0.5], [r + 12, 1.5, 1.5]].map(([pitch, start, duration], i) => ({ id: 'a' + i, pitch, start, duration }));
+      }
+    }
+    const t0 = ctx.currentTime + 0.05;
+    for (const n of notes) {
+      inst.instrument.playNote(ctx, inst.chain.input, n.pitch, t0 + n.start * spb, Math.min(n.duration, horizon - n.start) * spb, 0.8, n.bend);
+    }
   }
 
   /** Play a single note immediately (for auditioning while editing). */
