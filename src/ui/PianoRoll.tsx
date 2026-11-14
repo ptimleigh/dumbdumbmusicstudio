@@ -8,6 +8,8 @@ import { engine } from '../audio/engine';
 import { uid } from '../music/project';
 import { Icon, Popover, Segmented, Slider, Switch, useElementWidth, ZoomControls } from './kit';
 import { useTimeZoom } from './useZoom';
+import { usePref } from './usePref';
+import { isBool, numberBetween, oneOf } from '../prefs';
 import { Ruler } from './Ruler';
 import type { Region } from '../audio/transport';
 
@@ -36,13 +38,14 @@ export function PianoRoll({ project, track, playhead, playing, startBeat, loop, 
   project: Project; track: Track; playhead: number; playing: boolean; startBeat: number; loop: Region | null; loopOn: boolean;
   onSeek: (beat: number) => void; onLoop: (r: Region | null) => void; onNotes: (n: Note[], key?: string) => void;
 }) {
-  const [duration, setDuration] = useState(1);
-  const [lock, setLock] = useState(true);
-  const [showGhosts, setShowGhosts] = useState(true);
-  const [showClashes, setShowClashes] = useState(true);
-  const [rowH, setRowH] = useState(DEFAULT_ROW_H);
-  const [snapPref, setSnapPref] = useState<'auto' | number>('auto');
-  const [follow, setFollow] = useState(true);
+  // these are remembered between visits (they belong to you, not to the song)
+  const [duration, setDuration] = usePref('noteLength', 1, oneOf(...DURATION_LABELS.map(d => d.beats)));
+  const [lock, setLock] = usePref('stayInKey', true, isBool);
+  const [showGhosts, setShowGhosts] = usePref('showOtherTracks', true, isBool);
+  const [showClashes, setShowClashes] = usePref('highlightClashes', true, isBool);
+  const [rowH, setRowH] = usePref('noteHeight', DEFAULT_ROW_H, numberBetween(MIN_ROW_H, MAX_ROW_H));
+  const [snapPref, setSnapPref] = usePref<'auto' | number>('snap', 'auto', oneOf<'auto' | number>('auto', ...SNAPS.map(x => x.value)));
+  const [follow, setFollow] = usePref('followPlayhead', true, isBool);
   const total = project.bars * project.beatsPerBar;
   const drag = useRef<Drag | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());

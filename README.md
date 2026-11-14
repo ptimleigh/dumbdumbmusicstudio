@@ -38,6 +38,7 @@ person's own browser; nothing is uploaded anywhere.
 - `src/music/harmony.ts` – chords from the key, chord detection, "what comes next" suggestions, clash detection (pure, tested).
 - `src/music/bend.ts` – note slides (pitch glides up or down while a note plays, between a start and an end point inside the note); built-in synth ramps frequency, SoundFonts use MIDI pitch wheel events.
 - `src/music/edit.ts` – pure note-editing helpers: group move/resize, scale steps, copy/paste, box selection (tested).
+- `src/prefs.ts`, `src/ui/usePref.ts` – editor settings remembered between visits (Stay in key, note length, snap, note height, and the View toggles). They belong to the person, not the song.
 - `src/music/history.ts` – undo/redo (pure, tested).
 - `src/music/serialize.ts`, `src/storage.ts` – project files, autosave (localStorage) and SoundFont storage (IndexedDB).
 - `src/ui/theme.css` – design tokens (dark and light). `shell.css` – layout and components. `kit.tsx` – icons, popovers, segmented control, switch, slider, toasts.
