@@ -11,6 +11,18 @@ npm install
 npm run dev
 ```
 
+## Put it online (GitHub Pages)
+
+The app is a static site, so GitHub Pages can host it for free over HTTPS. HTTPS matters: phone browsers only allow
+SoundFonts and WAV export on secure addresses.
+
+1. On GitHub, open **Settings → Pages** and set **Source** to **GitHub Actions** (one time).
+2. Push to `main` (or run the **Deploy to GitHub Pages** workflow from the **Actions** tab).
+3. The address appears in the workflow run and in Settings → Pages, usually `https://<your-username>.github.io/dumbdumbmusicstudio/`.
+
+The workflow (`.github/workflows/deploy.yml`) runs the tests, builds, and publishes. Songs and SoundFonts stay in each
+person's own browser; nothing is uploaded anywhere.
+
 ## Architecture
 
 - `src/music/` – project data model and music theory (scales, chords, key-lock).
