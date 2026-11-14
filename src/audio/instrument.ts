@@ -15,41 +15,63 @@ interface SynthPatch {
   attack: number;
   release: number;
   cutoff: number;
+  /** Optional fade after the attack, for plucked sounds: reaches `level` of the peak after `time` seconds. */
+  decay?: { time: number; level: number };
 }
 
-type MelodicRole = Exclude<Role, 'drums'>;
+export type MelodicRole = Exclude<Role, 'drums'>;
 
-const PATCHES: Record<MelodicRole, SynthPatch> = {
-  melody: { type: 'triangle', detune: 6, attack: 0.01, release: 0.25, cutoff: 5000 },
-  lead: { type: 'sawtooth', detune: 8, attack: 0.01, release: 0.2, cutoff: 3500 },
-  chords: { type: 'sine', detune: 4, attack: 0.04, release: 0.5, cutoff: 3000 },
-  bass: { type: 'square', detune: 0, attack: 0.005, release: 0.12, cutoff: 700 },
+export type VoiceId = 'softKeys' | 'brightLead' | 'warmPad' | 'pluck' | 'deepBass' | 'buzzBass';
+
+/** The built-in sounds, described in plain words. */
+export const VOICES: Record<VoiceId, { label: string; patch: SynthPatch }> = {
+  softKeys: { label: 'Soft keys', patch: { type: 'triangle', detune: 6, attack: 0.01, release: 0.25, cutoff: 5000 } },
+  brightLead: { label: 'Bright lead', patch: { type: 'sawtooth', detune: 8, attack: 0.01, release: 0.2, cutoff: 3500 } },
+  warmPad: { label: 'Warm pad', patch: { type: 'sine', detune: 10, attack: 0.04, release: 0.5, cutoff: 3000 } },
+  pluck: { label: 'Pluck', patch: { type: 'sawtooth', detune: 3, attack: 0.003, release: 0.15, cutoff: 2600, decay: { time: 0.35, level: 0.25 } } },
+  deepBass: { label: 'Deep bass', patch: { type: 'square', detune: 0, attack: 0.005, release: 0.12, cutoff: 700 } },
+  buzzBass: { label: 'Buzzy bass', patch: { type: 'sawtooth', detune: 0, attack: 0.005, release: 0.1, cutoff: 1000 } },
 };
 
+export const VOICE_IDS = Object.keys(VOICES) as VoiceId[];
+
+export const DEFAULT_VOICE: Record<MelodicRole, VoiceId> = { melody: 'softKeys', lead: 'brightLead', chords: 'warmPad', bass: 'deepBass' };
+
 export class BuiltInSynth implements Instrument {
-  constructor(private role: MelodicRole) {}
+  constructor(private voice: VoiceId) {}
+
+  setVoice(v: VoiceId) { this.voice = v; }
 
   playNote(ctx: BaseAudioContext, dest: AudioNode, pitch: number, when: number, duration: number, velocity: number) {
-    const p = PATCHES[this.role];
+    const p = VOICES[this.voice].patch;
     const freq = midiToFreq(pitch);
     const end = when + duration;
     const gain = ctx.createGain();
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = p.cutoff;
-    const peak = 0.25 * velocity;
+    const peak = 0.25 * 1.25 * velocity; // the second oscillator is quieter, so lift the total back up
     gain.gain.setValueAtTime(0.0001, when);
     gain.gain.exponentialRampToValueAtTime(peak, when + p.attack);
-    gain.gain.setValueAtTime(peak, Math.max(when + p.attack, end));
+    let hold = peak;
+    if (p.decay) {
+      const dEnd = Math.min(when + p.attack + p.decay.time, end);
+      hold = peak * Math.pow(p.decay.level, (dEnd - when - p.attack) / p.decay.time);
+      gain.gain.exponentialRampToValueAtTime(Math.max(hold, 0.0001), Math.max(dEnd, when + p.attack + 0.001));
+    }
+    gain.gain.setValueAtTime(Math.max(hold, 0.0001), Math.max(when + p.attack + 0.001, end));
     gain.gain.exponentialRampToValueAtTime(0.0001, end + p.release);
     filter.connect(gain).connect(dest);
 
-    const oscs = [0, p.detune].map(d => {
+    const oscs = [0, p.detune].map((d, i) => {
       const o = ctx.createOscillator();
       o.type = p.type;
       o.frequency.value = freq;
       o.detune.value = d;
-      o.connect(filter);
+      // the detuned copy is quieter so the two never cancel each other out completely
+      const g = ctx.createGain();
+      g.gain.value = i === 0 ? 1 : 0.6;
+      o.connect(g).connect(filter);
       o.start(when);
       o.stop(end + p.release + 0.05);
       return o;
@@ -113,4 +135,5 @@ export class BuiltInDrums implements Instrument {
   }
 }
 
-export const builtInFor = (role: Role): Instrument => (role === 'drums' ? new BuiltInDrums() : new BuiltInSynth(role));
+export const builtInFor = (role: Role, voice?: VoiceId): Instrument =>
+  role === 'drums' ? new BuiltInDrums() : new BuiltInSynth(voice ?? DEFAULT_VOICE[role]);

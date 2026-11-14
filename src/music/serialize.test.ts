@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseProject, serializeProject, fileNameFor } from './serialize';
-import { newProject, newTrack } from './project';
+import { exampleProject, newProject, newTrack } from './project';
+import { SCALES } from './theory';
 
 describe('project files', () => {
   it('round-trips a project', () => {
@@ -30,5 +31,21 @@ describe('project files', () => {
   it('makes a safe file name', () => {
     const p = newProject(); p.name = 'My / song: v2?';
     expect(fileNameFor(p)).toBe('My-song-v2.dumbdumb.json');
+  });
+  it('ships an example song that saves and loads cleanly', () => {
+    const p = exampleProject();
+    expect(p.tracks.map(t => t.role)).toEqual(['melody', 'chords', 'bass', 'drums']);
+    expect(parseProject(serializeProject(p))).toEqual(p);
+  });
+  it('keeps the example melody in its key', () => {
+    const p = exampleProject();
+    for (const n of p.tracks[0].notes) expect(SCALES[p.scaleName]).toContain(((n.pitch - p.key) % 12 + 12) % 12);
+  });
+  it('remembers a track\'s built-in sound and ignores unknown ones', () => {
+    const p = newProject();
+    p.tracks[0].voice = 'pluck';
+    expect(parseProject(serializeProject(p)).tracks[0].voice).toBe('pluck');
+    const bad = JSON.parse(serializeProject(p)); bad.project.tracks[0].voice = 'nope';
+    expect(parseProject(JSON.stringify(bad)).tracks[0].voice).toBeUndefined();
   });
 });

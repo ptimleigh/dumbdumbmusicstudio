@@ -1,6 +1,7 @@
 import type { Note, Project, ScaleName, Track } from './types';
 import { newProject, newTrack, uid } from './project';
 import { SCALES } from './theory';
+import { VOICE_IDS, type VoiceId } from '../audio/instrument';
 
 const FORMAT = 'dumbdumbmusicstudio';
 const VERSION = 1;
@@ -46,6 +47,7 @@ function parseTrack(raw: any): Track | null {
       space: num(raw.macros?.space, 0, 10, 5),
     },
     sound,
+    voice: VOICE_IDS.includes(raw.voice) ? (raw.voice as VoiceId) : undefined,
     volume: num(raw.volume, 0, 1, 0.8),
     muted: raw.muted === true,
   };

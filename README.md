@@ -31,5 +31,7 @@ npm run dev
 3. ~~Project save/load~~ (done: autosave + file; SoundFonts remembered in the browser)
 3. ~~Undo/redo~~ (done)
 3. ~~WAV export~~ (done: real-time recording) · MIDI export
-4. Audio recording/import
-5. Desktop wrapper for VST3/CLAP plugin hosting
+4. ~~Polish pass~~ (done: welcome + example song, built-in sound choices, touch/mobile layout, select-to-delete notes)
+5. Smarter music help (chord suggestions, clash hints)
+6. Audio recording/import
+7. Desktop wrapper for VST3/CLAP plugin hosting

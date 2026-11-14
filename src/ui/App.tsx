@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Macros, Project, Role, Track } from '../music/types';
 import { change, initHistory, redo as redoHistory, undo as undoHistory } from '../music/history';
-import { newProject, newTrack, ROLE_LABELS } from '../music/project';
+import { exampleProject, newProject, newTrack, ROLE_LABELS } from '../music/project';
 import { NOTE_NAMES, SCALE_LABELS } from '../music/theory';
 import { fileNameFor, parseProject, serializeProject } from '../music/serialize';
 import { clearAutosave, getSoundFont, loadAutosave, putSoundFont, saveAutosave } from '../storage';
@@ -9,6 +9,7 @@ import { engine } from '../audio/engine';
 import { PianoRoll } from './PianoRoll';
 import { DrumGrid } from './DrumGrid';
 import { ExportDialog } from './ExportDialog';
+import { Welcome } from './Welcome';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
@@ -25,6 +26,13 @@ export function App() {
   const [notices, setNotices] = useState<string[]>([]);
   const [confirmNew, setConfirmNew] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try { return localStorage.getItem('dumbdumb.welcomeSeen') !== '1'; } catch { return true; }
+  });
+  const closeWelcome = () => {
+    setShowWelcome(false);
+    try { localStorage.setItem('dumbdumb.welcomeSeen', '1'); } catch { /* ignore */ }
+  };
   const openRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
@@ -114,6 +122,11 @@ export function App() {
     setNotices([]);
   }
 
+  function loadExample() {
+    openProject(exampleProject());
+    closeWelcome();
+  }
+
   async function togglePlay() {
     if (engine.playing) { engine.stop(); setPlaying(false); }
     else { await engine.play(); setPlaying(true); }
@@ -175,6 +188,7 @@ export function App() {
         <input className="song-name" aria-label="Song name" value={project.name} onChange={e => patch({ name: e.target.value }, 'song-name')} />
         <button onClick={undo} disabled={hist.past.length === 0} title="Undo (Ctrl+Z)">↶ Undo</button>
         <button onClick={redo} disabled={hist.future.length === 0} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+        <button onClick={() => setShowWelcome(v => !v)} title="Show or hide the getting-started tips" aria-label="Help" aria-pressed={showWelcome}>?</button>
         <button onClick={() => { engine.stop(); setPlaying(false); setExporting(true); }} title="Record the song to an audio file">Export WAV</button>
         <button onClick={saveToFile} title="Download this song as a file">Save</button>
         <button onClick={() => openRef.current?.click()} title="Open a saved song file">Open</button>
@@ -202,6 +216,8 @@ export function App() {
           </select>
         </label>
       </header>
+
+      {showWelcome && <Welcome onExample={loadExample} onClose={closeWelcome} />}
 
       {notices.length > 0 && (
         <div className="notices" role="status">
@@ -237,6 +253,7 @@ export function App() {
         )}
         <TrackPanel
           track={track}
+          onVoice={v => patchTrack(track.id, t => ({ ...t, voice: v }), { key: `voice:${track.id}` })}
           loading={loadingId === track.id}
           error={sfError}
           onLoadFile={loadSoundFont}

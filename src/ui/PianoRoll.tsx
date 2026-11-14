@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Note, Project, Track } from '../music/types';
 import { DURATION_LABELS, isBlackKey, isInScale, noteName, snapToScale, triadFromDegree } from '../music/theory';
 import { engine } from '../audio/engine';
@@ -17,6 +17,9 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
   const [lock, setLock] = useState(true);
   const total = project.bars * project.beatsPerBar;
   const drag = useRef<Drag | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const lastPointer = useRef<string>('mouse'); // double-click and right-click only remove notes with a mouse, never by accident on touch
+  const selectedNote = track.notes.find(n => n.id === selected) ?? null;
   const rows: number[] = [];
   for (let p = HIGH; p >= LOW; p--) rows.push(p);
 
@@ -26,6 +29,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     let pitch = HIGH - Math.floor(y / ROW_H);
     const start = Math.floor(x / BEAT_W / GRID) * GRID;
     if (start + GRID > total) return;
+    setSelected(null);
     if (lock) pitch = snapToScale(pitch, project.key, project.scaleName);
     const note: Note = { id: uid('n'), pitch, start, duration: Math.min(duration, total - start) };
     onNotes([...track.notes, note]);
@@ -38,6 +42,8 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     const rect = e.currentTarget.getBoundingClientRect();
     const edge = Math.min(HANDLE, rect.width / 3);
     const mode: DragMode = e.clientX - rect.left < edge ? 'left' : rect.right - e.clientX < edge ? 'right' : 'move';
+    setSelected(n.id);
+    lastPointer.current = e.pointerType;
     drag.current = { gid: uid('drag'), id: n.id, mode, x0: e.clientX, y0: e.clientY, orig: n, base: track.notes, lastPitch: n.pitch };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
@@ -70,7 +76,18 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
-  const removeNote = (id: string) => onNotes(track.notes.filter(x => x.id !== id));
+  const removeNote = (id: string) => { setSelected(null); onNotes(track.notes.filter(x => x.id !== id)); };
+
+  // Delete or Backspace removes the selected note
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (!selectedNote || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeNote(selectedNote.id); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   function addChord(degree: number) {
     // drop a triad at the first free bar-aligned spot after the last note
@@ -95,6 +112,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
           <button key={d.label} className={d.beats === duration ? 'chip on' : 'chip'} onClick={() => setDuration(d.beats)}>{d.label}</button>
         ))}
         <label className="check"><input type="checkbox" checked={lock} onChange={e => setLock(e.target.checked)} /> Keep me in key</label>
+        {selectedNote && <button className="chip danger" onClick={() => removeNote(selectedNote.id)} title="Or press Delete">Remove selected note</button>}
         <span className="spacer" />
         <span>Add chord:</span>
         {['I', 'ii', 'iii', 'IV', 'V', 'vi'].map((n, i) => (
@@ -116,19 +134,19 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
             <div key={b} className={'beat-line' + (b % project.beatsPerBar === 0 ? ' bar' : '')} style={{ left: b * BEAT_W }} />
           ))}
           {track.notes.map(n => (
-            <div key={n.id} className="note" title="Drag the edges to resize, drag the middle to move, double-click to remove"
+            <div key={n.id} className={'note' + (n.id === selected ? ' selected' : '')} title="Drag the edges to resize, drag the middle to move. Select a note and press Delete to remove it"
               style={{ left: n.start * BEAT_W, top: (HIGH - n.pitch) * ROW_H, width: n.duration * BEAT_W - 1, height: ROW_H - 1, background: track.color }}
               onPointerDown={e => startDrag(e, n)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
               onMouseDown={e => e.stopPropagation()}
-              onDoubleClick={e => { e.stopPropagation(); removeNote(n.id); }}
-              onContextMenu={e => { e.preventDefault(); removeNote(n.id); }}>
+              onDoubleClick={e => { e.stopPropagation(); if (lastPointer.current === 'mouse') removeNote(n.id); }}
+              onContextMenu={e => { e.preventDefault(); if (lastPointer.current === 'mouse') removeNote(n.id); }}>
               <span className="grip left" /><span className="label">{n.duration >= 1 ? noteName(n.pitch) : ''}</span><span className="grip right" />
             </div>
           ))}
           <div className="playhead" style={{ left: playhead * BEAT_W, display: playhead > 0 ? 'block' : 'none' }} />
         </div>
       </div>
-      <p className="help">Click the grid to add a note · drag a note's left or right edge to resize it · drag the middle to move it · double-click to remove · Space to play/stop</p>
+      <p className="help">Tap or click the grid to add a note · drag a note's edges to resize it, or its middle to move it · select a note, then press Delete or use the Remove button · Space to play/stop</p>
     </section>
   );
 }

@@ -44,7 +44,7 @@ button:hover { background:#353949; }
 .macro-ends { color:var(--muted); font-size:11px; }
 .macro input { width:100%; accent-color:var(--accent); }
 .row-btns { display:flex; flex-wrap:wrap; gap:6px; }
-@media (max-width:800px) { .workspace { flex-direction:column; overflow:auto; } .panel { width:auto; } }
+
 
 .instrument { display:flex; flex-direction:column; gap:8px; }
 .instrument select { width:100%; }
@@ -72,3 +72,36 @@ button:disabled { opacity:.5; cursor:default; }
 .muted { color:var(--muted); }
 .bar { height:10px; background:#2b2e3b; border-radius:999px; overflow:hidden; margin-bottom:16px; }
 .bar-fill { height:100%; background:var(--accent); transition:width .1s linear; }
+
+.note.selected { outline:2px solid #fff; outline-offset:-1px; z-index:1; }
+.chip.danger { border-color:#7a3b3b; color:#ffb3b3; }
+
+.voice { display:flex; flex-direction:column; gap:4px; }
+.file-name.wrap { white-space:normal; line-height:1.4; }
+
+.welcome { display:flex; gap:20px; align-items:center; justify-content:space-between; flex-wrap:wrap; background:#26283a; border:1px solid #3d4160; border-radius:10px; padding:14px 18px; margin:8px 0 0; }
+.welcome h2 { margin:0 0 6px; font-size:16px; }
+.welcome ol { margin:0 0 6px; padding-left:20px; line-height:1.6; }
+.welcome p { margin:0; font-size:12px; }
+.welcome-text { flex:1; min-width:260px; }
+.welcome-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+.roll-scroll { overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+@media (pointer:coarse) {
+  button, select, .song-name, .name { min-height:40px; }
+  .chip { padding:8px 14px; }
+  .drum-grid { touch-action:pan-x pan-y; }
+  .grip { width:14px !important; }
+}
+@media (max-width:800px) {
+  html, body { height:auto; min-height:100%; }
+  .app { height:auto; min-height:100%; }
+  .topbar { gap:10px; padding:8px 0; }
+  .topbar h1 { width:100%; margin:0; }
+  .song-name { width:100%; flex:1 1 140px; }
+  .workspace { flex-direction:column; overflow:visible; }
+  .roll { flex:none; height:min(68vh, 520px); }
+  .panel { width:auto; overflow:visible; }
+  .welcome { padding:12px; }
+  .roll-tools { gap:6px; }
+}

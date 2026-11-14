@@ -1,7 +1,7 @@
 import type { Project, SoundFontPreset, Track } from '../music/types';
 import { SoundFontInstrument } from './soundfont';
 import { createRecorderNode } from './recorder';
-import { builtInFor, type Instrument } from './instrument';
+import { BuiltInSynth, DEFAULT_VOICE, builtInFor, type Instrument } from './instrument';
 import { applyMacros, createTrackChain, makeImpulse, type TrackChain } from './chain';
 
 interface EngineTrack {
@@ -40,7 +40,7 @@ export class Engine {
     const ctx = this.ensure();
     let c = this.chains.get(track.id);
     if (!c) {
-      c = { chain: createTrackChain(ctx, this.master, this.reverb), instrument: builtInFor(track.role) };
+      c = { chain: createTrackChain(ctx, this.master, this.reverb), instrument: builtInFor(track.role, track.voice) };
       this.chains.set(track.id, c);
     }
     return c;
@@ -49,7 +49,9 @@ export class Engine {
   /** Push the current macro/volume settings into the audio graph (safe to call often). */
   applyTrackSettings(track: Track) {
     const ctx = this.ensure();
-    applyMacros(ctx, this.chainFor(track).chain, track.macros, track.volume, track.muted);
+    const et = this.chainFor(track);
+    if (et.instrument instanceof BuiltInSynth && track.role !== 'drums') et.instrument.setVoice(track.voice ?? DEFAULT_VOICE[track.role]);
+    applyMacros(ctx, et.chain, track.macros, track.volume, track.muted);
   }
 
   /** Play a single note immediately (for auditioning while editing). */
@@ -177,7 +179,7 @@ export class Engine {
   useBuiltInSound(track: Track) {
     const chain = this.chainFor(track);
     this.releaseInstrument(chain);
-    chain.instrument = builtInFor(track.role);
+    chain.instrument = builtInFor(track.role, track.voice);
     chain.soundfontFile = undefined;
   }
 

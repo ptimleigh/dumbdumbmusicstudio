@@ -1,3 +1,5 @@
+import type { VoiceId } from '../audio/instrument';
+
 export interface Note {
   id: string;
   pitch: number;    // MIDI note number
@@ -34,6 +36,8 @@ export interface Track {
   notes: Note[];
   macros: Macros;
   sound: TrackSound;
+  /** Which built-in sound a melodic track uses when it has no SoundFont. Defaults by role. */
+  voice?: VoiceId;
   volume: number; // 0..1
   muted: boolean;
 }

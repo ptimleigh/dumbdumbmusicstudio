@@ -1,9 +1,11 @@
 import { useRef } from 'react';
 import type { Macros, Track } from '../music/types';
+import { DEFAULT_VOICE, VOICES, VOICE_IDS, type VoiceId } from '../audio/instrument';
 import { MACRO_INFO } from '../audio/macros';
 
-export function TrackPanel({ track, loading, error, onLoadFile, onPreset, onBuiltIn, onMacro, onVolume, onMute, onRename, onClear, onRemove, canRemove }: {
+export function TrackPanel({ track, onVoice, loading, error, onLoadFile, onPreset, onBuiltIn, onMacro, onVolume, onMute, onRename, onClear, onRemove, canRemove }: {
   track: Track;
+  onVoice: (v: VoiceId) => void;
   loading: boolean;
   error: string | null;
   onLoadFile: (f: File) => void;
@@ -32,7 +34,16 @@ export function TrackPanel({ track, loading, error, onLoadFile, onPreset, onBuil
             <div className="file-name" title={sf.fileName}>{sf.fileName}</div>
           </>
         ) : (
-          <div className="file-name">{track.role === 'drums' ? 'Built-in drums' : 'Built-in synth'}</div>
+          track.role === 'drums'
+            ? <div className="file-name">Built-in drums</div>
+            : (
+              <label className="voice">
+                <span className="file-name">Sound</span>
+                <select value={track.voice ?? DEFAULT_VOICE[track.role]} onChange={e => onVoice(e.target.value as VoiceId)}>
+                  {VOICE_IDS.map(v => <option key={v} value={v}>{VOICES[v].label}</option>)}
+                </select>
+              </label>
+            )
         )}
         <div className="row-btns">
           <button disabled={loading} onClick={() => fileRef.current?.click()}>
@@ -40,6 +51,7 @@ export function TrackPanel({ track, loading, error, onLoadFile, onPreset, onBuil
           </button>
           {sf && <button onClick={onBuiltIn}>Use built-in</button>}
         </div>
+        {!sf && <div className="file-name wrap">A SoundFont is a free pack of real instrument sounds (a .sf2 file). Search for “free GM SoundFont” to find one.</div>}
         {error && <div className="error">{error}</div>}
         <input ref={fileRef} type="file" accept=".sf2,.sf3,.dls" hidden
           onChange={e => { const f = e.target.files?.[0]; if (f) onLoadFile(f); e.target.value = ''; }} />
