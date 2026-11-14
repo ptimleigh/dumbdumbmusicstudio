@@ -271,15 +271,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px va
 .empty-hint strong { color: var(--text); }
 .empty-hint .icon { color: var(--accent-text); }
 
-.sel-wrap { position: absolute; left: 12px; right: 12px; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 20; pointer-events: none; }
-.sel-wrap > * { pointer-events: auto; }
-.sel-bar { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: var(--shadow); max-width: 100%; flex-wrap: wrap; justify-content: center; animation: pop .16s var(--ease); }
 .sel-count { font-weight: 800; font-size: 13px; padding: 0 10px 0 6px; white-space: nowrap; }
 .sel-group { display: inline-flex; align-items: center; gap: 0; padding-left: 4px; margin-left: 4px; border-left: 1px solid var(--line-strong); }
-.sel-bar .btn-icon { width: 34px; height: 34px; }
-.sel-bar .btn-text { font-size: 12.5px; white-space: nowrap; }
-.sel-bar .danger-icon:hover { color: var(--danger); }
-.roll-toast { background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; box-shadow: var(--shadow); animation: pop .16s var(--ease); max-width: 100%; text-align: center; }
 .slide-row { display: flex; align-items: center; gap: 12px; margin: 6px 0 12px; }
 .slide-row input { flex: 1; }
 .slide-readout { min-width: 74px; color: var(--text); font-weight: 600; font-size: 13px; }
@@ -287,9 +280,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px va
 .roll-foot { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--text-3); font-size: 12px; }
 .roll-foot kbd { margin-right: 3px; }
 @media (max-width: 800px) {
-  .roll { height: min(72vh, 560px); flex: none; }
+  .roll { height: clamp(480px, 74vh, 660px); flex: none; }
   .roll-foot { display: none; }
-  .sel-bar .btn-text { display: none; }
 }
 @media (pointer: coarse) { .grid.select-tool { touch-action: none; } .note .grip { width: 14px; } }
 
@@ -371,25 +363,47 @@ input[type=range]::-moz-range-progress { background: var(--fill); }
   .transport { order: 3; }
   .roll-bar { padding: 8px 10px; gap: 8px; }
   .roll-bar .lbl { display: none; }
-  .sel-count { width: 100%; text-align: center; padding: 2px 0 0; }
-  .sel-group:first-of-type { border-left: 0; margin-left: 0; }
+  .sel-count { display: none; }
   .shortcut-group dl > div { grid-template-columns: 1fr; gap: 2px; }
 }
 
 /* ---------- zoom ---------- */
-.zoom-fab { position: absolute; top: 40px; right: 14px; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; background: color-mix(in srgb, var(--surface-3) 92%, transparent); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
-.zoom-fab .btn-icon { width: 34px; height: 34px; }
-.zoom-badge { font-size: 11px; font-weight: 800; color: var(--accent-text); padding: 2px 0 3px; font-variant-numeric: tabular-nums; }
 .snap-lines { position: absolute; left: 0; top: 0; pointer-events: none; background-image: repeating-linear-gradient(90deg, var(--beat-line) 0 1px, transparent 1px var(--snap-w)); opacity: .7; }
 .snap-ticks { position: absolute; left: 0; bottom: 0; right: 0; height: 5px; pointer-events: none; background-image: repeating-linear-gradient(90deg, var(--line-strong) 0 1px, transparent 1px var(--snap-w)); opacity: .55; }
 .tick span.sub { font-weight: 600; font-size: 10.5px; opacity: .8; }
 .snap-field { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .view-panel { min-width: 300px; }
 .zoom span { min-width: 82px; }
-@media (max-width: 800px) { .zoom-fab { flex-direction: row; top: 36px; right: 8px; } .zoom-badge { padding: 0 6px; } }
 
 @media (max-width: 800px) {
   .add-track-btn { padding: 0; width: 42px; }
   .add-track-btn .lbl { display: none; }
   .tracks { mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
 }
+
+.zoom-group { display: inline-flex; align-items: center; gap: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 1px; }
+.zoom-group .btn-icon { width: 32px; height: 30px; border-radius: 8px; }
+.zoom-badge { min-width: 38px; text-align: center; font-size: 12px; font-weight: 800; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.dock-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; color: var(--text-3); font-size: 12px; padding: 0 4px; }
+.dock-hints kbd { margin-right: 3px; }
+.hint-touch { display: none; }
+@media (pointer: coarse), (max-width: 800px) { .hint-pointer { display: none; } .hint-touch { display: inline; } }
+
+/* ---------- selection strip: fixed height, so selecting a note never moves anything ---------- */
+.sel-dock { display: flex; align-items: center; flex-wrap: nowrap; gap: 2px; padding: 0 10px; height: 46px; flex: none; background: var(--surface-2); border-top: 1px solid var(--line); }
+.sel-dock .btn-icon { width: 34px; height: 34px; min-width: 0; flex: none; }
+.sel-dock .btn-text { font-size: 12.5px; white-space: nowrap; }
+.sel-dock .danger-icon:hover { color: var(--danger); }
+.roll-toast { position: absolute; top: 40px; left: 50%; translate: -50% 0; z-index: 25; max-width: calc(100% - 24px); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; box-shadow: var(--shadow); text-align: center; pointer-events: none; animation: pop .16s var(--ease); }
+@media (max-width: 1100px) { .sel-dock .btn-text, .sel-count { display: none; } }
+@media (max-width: 800px) {
+  .sel-dock { padding: 0 6px; gap: 0; }
+  .sel-dock .sel-group { display: contents; }
+  .sel-dock .btn-icon, .sel-dock .popover { flex: 1 1 0; width: auto; min-width: 0; max-width: 46px; }
+  .sel-dock .popover .btn { width: 100%; padding: 0; min-width: 0; }
+  .sel-dock .lbl { display: none; }
+}
+
+.lbl-short { display: none; }
+@media (max-width: 800px) { .lbl-full { display: none; } .lbl-short { display: inline; } }

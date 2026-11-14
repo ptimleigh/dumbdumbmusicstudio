@@ -3,7 +3,7 @@ import type { Note, Project, Track } from '../music/types';
 import { DRUM_PATTERNS, DRUM_ROWS, STEP, STEPS_PER_BEAT, stepsPerBar } from '../music/drums';
 import { uid } from '../music/project';
 import { engine } from '../audio/engine';
-import { Icon, Popover, useElementWidth } from './kit';
+import { Icon, Popover, useElementWidth, ZoomControls } from './kit';
 import { useTimeZoom } from './useZoom';
 
 const ROW_H = 34, LABEL_W = 104, RULER_H = 28;
@@ -91,6 +91,7 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
         </Popover>
         <span className="spacer" />
         <span className="muted bar-note">Click or drag across squares to paint hits</span>
+        <ZoomControls tz={tz} />
       </div>
       <div className="roll-main">
         <div className="roll-scroll" ref={scrollRef}>
@@ -126,12 +127,6 @@ export function DrumGrid({ project, track, playhead, onNotes }: {
               </div>
             </div>
           </div>
-        </div>
-        <div className="zoom-fab" role="group" aria-label="Zoom">
-          <button className="btn-icon" onClick={() => tz.zoomBy(1.5)} disabled={tz.zoom >= tz.maxZoom - 0.001} title="Zoom in (+ or Ctrl+scroll)" aria-label="Zoom in"><Icon name="zoomIn" /></button>
-          <button className="btn-icon" onClick={() => tz.zoomBy(1 / 1.5)} disabled={tz.atFit} title="Zoom out (−)" aria-label="Zoom out"><Icon name="zoomOut" /></button>
-          <button className="btn-icon" onClick={tz.reset} disabled={tz.atFit} title="Fit the whole song in the window (0)" aria-label="Fit the song"><Icon name="fit" /></button>
-          {!tz.atFit && <span className="zoom-badge" aria-hidden="true">{tz.zoom >= 10 ? Math.round(tz.zoom) : tz.zoom.toFixed(1)}×</span>}
         </div>
         {track.notes.length === 0 && (
           <div className="empty-hint" aria-hidden="true">

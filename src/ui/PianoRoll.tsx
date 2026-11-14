@@ -6,7 +6,7 @@ import { makeClip, moveNotes, notesInRect, pasteClip, resizeNotes, selectionBoun
 import { chordScaleOf, findClashes, lastChord, ROMAN, suggestNext, triadPitches } from '../music/harmony';
 import { engine } from '../audio/engine';
 import { uid } from '../music/project';
-import { Icon, Popover, Segmented, Slider, Switch, useElementWidth } from './kit';
+import { Icon, Popover, Segmented, Slider, Switch, useElementWidth, ZoomControls } from './kit';
 import { useTimeZoom } from './useZoom';
 
 const LOW = 48, HIGH = 84; // C3..C6
@@ -300,7 +300,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
       if (mod && k === 'd') { e.preventDefault(); repeatSelection(); return; }
       if (mod) return;
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSelected(); return; }
-      if (e.key === 'Escape') { setSelected(new Set()); return; }
+      if (e.key === 'Escape') { if (!document.querySelector('.popover-panel')) setSelected(new Set()); return; } // Esc closes an open menu first
       const big = e.shiftKey;
       if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(big ? -project.beatsPerBar / 4 : -GRID, 0); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); nudge(big ? project.beatsPerBar / 4 : GRID, 0); }
@@ -334,10 +334,10 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
       <div className="roll-bar">
         <Segmented label="Tool" value={tool} onChange={setTool}
           options={[
-            { value: 'draw', label: <><Icon name="pencil" size={15} />Draw</>, title: 'Click the grid to add notes' },
-            { value: 'select', label: <><Icon name="select" size={15} />Select</>, title: 'Drag a box around notes to select them (or hold Shift in Draw mode)' },
+            { value: 'draw', label: <><Icon name="pencil" size={15} /><span className="lbl">Draw</span></>, title: 'Click the grid to add notes' },
+            { value: 'select', label: <><Icon name="select" size={15} /><span className="lbl">Select</span></>, title: 'Drag a box around notes to select them (or hold Shift in Draw mode)' },
           ]} />
-        <Popover buttonClass="btn small" title="How long each new note is" trigger={<><span className="muted">Note</span> {lengthLabel}<Icon name="chevron" size={14} /></>}>
+        <Popover buttonClass="btn small" title="How long each new note is" trigger={<><span className="muted lbl">Note</span> {lengthLabel}<Icon name="chevron" size={14} /></>}>
           {close => (
             <div role="menu" className="length-menu">
               <div className="menu-title">New note length</div>
@@ -350,13 +350,14 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
             </div>
           )}
         </Popover>
-        <Switch checked={lock} onChange={setLock}>Stay in key</Switch>
+        <Switch checked={lock} onChange={setLock}><span className="lbl-full">Stay in key</span><span className="lbl-short">In key</span></Switch>
         <span className="spacer" />
         {clashes.size > 0 && (
           <span className="clash-chip" title="Notes a semitone from a note on another track clash. They have a dashed red outline.">
             <Icon name="eye" size={14} />{clashes.size} {clashes.size === 1 ? 'clash' : 'clashes'}
           </span>
         )}
+        <ZoomControls tz={tz} />
         <Popover buttonClass="btn small" align="end" title="Add a chord that fits your key" trigger={<><Icon name="note" size={15} /><span className="lbl">Chords</span><Icon name="chevron" size={14} /></>}>
           {close => (
             <div className="chord-panel">
@@ -462,12 +463,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
           </div>
         </div>
 
-        <div className="zoom-fab" role="group" aria-label="Zoom">
-          <button className="btn-icon" onClick={() => tz.zoomBy(1.5)} disabled={tz.zoom >= tz.maxZoom - 0.001} title="Zoom in (+ or Ctrl+scroll)" aria-label="Zoom in"><Icon name="zoomIn" /></button>
-          <button className="btn-icon" onClick={() => tz.zoomBy(1 / 1.5)} disabled={tz.atFit} title="Zoom out (−)" aria-label="Zoom out"><Icon name="zoomOut" /></button>
-          <button className="btn-icon" onClick={tz.reset} disabled={tz.atFit} title="Fit the whole song in the window (0)" aria-label="Fit the song"><Icon name="fit" /></button>
-          {!tz.atFit && <span className="zoom-badge" aria-hidden="true">{tz.zoom >= 10 ? Math.round(tz.zoom) : tz.zoom.toFixed(1)}×</span>}
-        </div>
+        {message && <div className="roll-toast" role="status">{message}</div>}
 
         {track.notes.length === 0 && (
           <div className="empty-hint" aria-hidden="true">
@@ -477,11 +473,11 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
           </div>
         )}
 
-        {(selNotes.length > 0 || message) && (
-          <div className="sel-wrap">
-            {message && <div className="roll-toast" role="status">{message}</div>}
+      </div>
+        {(
+          <div className="sel-dock" role="toolbar" aria-label="Selected notes">
             {selNotes.length > 0 && (
-              <div className="sel-bar" role="toolbar" aria-label="Selected notes">
+              <>
                 <span className="sel-count">{selNotes.length} selected</span>
                 <span className="sel-group">
                   <button className="btn-icon" onClick={() => nudge(-GRID, 0)} title="Move earlier (←)" aria-label="Move earlier"><Icon name="left" /></button>
@@ -500,7 +496,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
                   {clipboard.current && <button className="btn-icon" onClick={pasteSelection} title="Paste (Ctrl+V). Each paste lands after the previous one." aria-label="Paste"><Icon name="paste" /></button>}
                 </span>
                 {selectedNote && (
-                  <Popover up buttonClass="btn small" align="center" title="Make this note slide up or down" trigger={<><Icon name="slide" size={15} />Slide{selectedNote.bend ? ` ${selectedNote.bend.semitones > 0 ? '+' : ''}${selectedNote.bend.semitones}` : ''}</>}>
+                  <Popover up buttonClass="btn small" align="center" title="Make this note slide up or down" trigger={<><Icon name="slide" size={15} /><span className="lbl">Slide{selectedNote.bend ? ` ${selectedNote.bend.semitones > 0 ? '+' : ''}${selectedNote.bend.semitones}` : ''}</span></>}>
                     <div className="slide-panel">
                       <div className="menu-title">Slide this note</div>
                       <label className="slide-row">
@@ -522,19 +518,21 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
                 )}
                 <button className="btn-icon danger-icon" onClick={removeSelected} title="Remove (Delete)" aria-label="Remove"><Icon name="trash" /></button>
                 <button className="btn-icon" onClick={() => setSelected(new Set())} title="Deselect (Esc)" aria-label="Deselect"><Icon name="x" /></button>
+              </>
+            )}
+            {selNotes.length === 0 && (
+              <div className="dock-hints">
+                <span className="hint-pointer"><kbd>Click</kbd> add a note</span>
+                <span className="hint-pointer"><kbd>Shift</kbd>+drag select several</span>
+                <span className="hint-pointer"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> nudge</span>
+                <span className="hint-pointer"><kbd>Ctrl</kbd>+<kbd>D</kbd> repeat</span>
+                <span className="hint-pointer"><kbd>Space</kbd> play</span>
+                <span className="hint-touch">Tap a note to edit it. Pinch to zoom.</span>
+                {tool === 'select' && <button className="btn-text" onClick={selectAll} disabled={track.notes.length === 0}>Select all</button>}
               </div>
             )}
           </div>
         )}
-      </div>
-      <div className="roll-foot">
-        <span><kbd>Click</kbd> add a note</span>
-        <span><kbd>Shift</kbd>+drag select several</span>
-        <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> nudge</span>
-        <span><kbd>Ctrl</kbd>+<kbd>D</kbd> repeat</span>
-        <span><kbd>Space</kbd> play</span>
-        {tool === 'select' && <button className="btn-text" onClick={selectAll} disabled={track.notes.length === 0}>Select all</button>}
-      </div>
     </section>
   );
 }

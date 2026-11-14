@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 /* ---------- icons: 24px, drawn with strokes so they follow the text color ---------- */
 const P: Record<string, ReactNode> = {
@@ -79,10 +79,25 @@ export function Popover({ trigger, children, align = 'start', buttonClass = 'btn
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState(0);
+  // keep the panel inside the screen, whatever the button's position
+  useLayoutEffect(() => {
+    if (!open) { setShift(0); return; }
+    const el = panelRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect(), vw = document.documentElement.clientWidth, pad = 8;
+    const current = shift;
+    const natural = { left: r.left - current, right: r.right - current };
+    if (natural.right > vw - pad) setShift(vw - pad - natural.right);
+    else if (natural.left < pad) setShift(pad - natural.left);
+    else setShift(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const down = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }; // an open menu takes the Esc key for itself
     document.addEventListener('pointerdown', down);
     document.addEventListener('keydown', key);
     return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key); };
@@ -92,7 +107,7 @@ export function Popover({ trigger, children, align = 'start', buttonClass = 'btn
     <div className="popover" ref={ref}>
       <button type="button" className={buttonClass} aria-haspopup="true" aria-expanded={open} title={title} aria-label={label}
         onClick={() => setOpen(o => !o)}>{trigger}</button>
-      {open && <div className={`popover-panel align-${align}${up ? ' up' : ''}`}>{typeof children === 'function' ? children(close) : children}</div>}
+      {open && <div ref={panelRef} style={shift ? { translate: `${shift}px 0` } : undefined} className={`popover-panel align-${align}${up ? ' up' : ''}`}>{typeof children === 'function' ? children(close) : children}</div>}
     </div>
   );
 }
@@ -168,5 +183,17 @@ export function Slider({ value, min, max, step = 1, onChange, label, onDoubleCli
   return (
     <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onDoubleClick={onDoubleClick}
       style={{ ['--p' as string]: `${((value - min) / (max - min)) * 100}%` }} onChange={e => onChange(+e.target.value)} />
+  );
+}
+
+/** Zoom out, zoom in and fit. Lives in the toolbar so it never covers the notes. */
+export function ZoomControls({ tz }: { tz: { zoom: number; maxZoom: number; atFit: boolean; zoomBy: (f: number) => void; reset: () => void } }) {
+  return (
+    <div className="zoom-group" role="group" aria-label="Zoom">
+      <button className="btn-icon" onClick={() => tz.zoomBy(1 / 1.5)} disabled={tz.atFit} title="Zoom out (−)" aria-label="Zoom out"><Icon name="zoomOut" size={17} /></button>
+      <span className="zoom-badge" aria-hidden="true">{tz.atFit ? 'Fit' : `${tz.zoom >= 10 ? Math.round(tz.zoom) : tz.zoom.toFixed(1)}×`}</span>
+      <button className="btn-icon" onClick={() => tz.zoomBy(1.5)} disabled={tz.zoom >= tz.maxZoom - 0.001} title="Zoom in (+ or Ctrl+scroll)" aria-label="Zoom in"><Icon name="zoomIn" size={17} /></button>
+      <button className="btn-icon hide-sm" onClick={tz.reset} disabled={tz.atFit} title="Fit the whole song in the window (0)" aria-label="Fit the song"><Icon name="fit" size={17} /></button>
+    </div>
   );
 }
