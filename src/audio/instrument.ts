@@ -1,12 +1,13 @@
 import { midiToFreq } from '../music/theory';
 import type { Role } from '../music/types';
+import { bendStart, type NoteBend } from '../music/bend';
 
 /**
  * A sound source turns notes into audio. The built-in synth is the first
  * implementation; SoundFont (SF2) and plugin sources will implement the same interface.
  */
 export interface Instrument {
-  playNote(ctx: BaseAudioContext, dest: AudioNode, pitch: number, when: number, duration: number, velocity: number): void;
+  playNote(ctx: BaseAudioContext, dest: AudioNode, pitch: number, when: number, duration: number, velocity: number, bend?: NoteBend): void;
 }
 
 interface SynthPatch {
@@ -42,7 +43,7 @@ export class BuiltInSynth implements Instrument {
 
   setVoice(v: VoiceId) { this.voice = v; }
 
-  playNote(ctx: BaseAudioContext, dest: AudioNode, pitch: number, when: number, duration: number, velocity: number) {
+  playNote(ctx: BaseAudioContext, dest: AudioNode, pitch: number, when: number, duration: number, velocity: number, bend?: NoteBend) {
     const p = VOICES[this.voice].patch;
     const freq = midiToFreq(pitch);
     const end = when + duration;
@@ -66,7 +67,13 @@ export class BuiltInSynth implements Instrument {
     const oscs = [0, p.detune].map((d, i) => {
       const o = ctx.createOscillator();
       o.type = p.type;
-      o.frequency.value = freq;
+      o.frequency.setValueAtTime(freq, when);
+      if (bend && bend.semitones !== 0) {
+        // hold the pitch until the slide starts, then glide to the target by the end of the note
+        const slideFrom = when + duration * bendStart(bend);
+        o.frequency.setValueAtTime(freq, slideFrom);
+        o.frequency.exponentialRampToValueAtTime(freq * Math.pow(2, bend.semitones / 12), Math.max(end, slideFrom + 0.01));
+      }
       o.detune.value = d;
       // the detuned copy is quieter so the two never cancel each other out completely
       const g = ctx.createGain();

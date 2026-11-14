@@ -1,6 +1,7 @@
 import { WorkletSynthesizer } from 'spessasynth_lib';
 import processorUrl from 'spessasynth_lib/dist/spessasynth_processor.min.js?url';
 import type { SoundFontPreset } from '../music/types';
+import { MAX_BEND, pitchWheelSteps, type NoteBend } from '../music/bend';
 import type { Instrument } from './instrument';
 
 const loadedContexts = new WeakSet<BaseAudioContext>();
@@ -16,6 +17,9 @@ async function ensureWorklet(ctx: AudioContext) {
  * Each track owns one synthesizer so its audio can run through the track's own effect chain.
  */
 export class SoundFontInstrument implements Instrument {
+  /** True while the channel's pitch wheel may be off-center from an earlier slide. */
+  private bentDirty = false;
+
   private constructor(private synth: WorkletSynthesizer, readonly presets: SoundFontPreset[], private channel: number, private drums: boolean) {}
 
   /** `drums` picks drum kits (played on the General MIDI drum channel) instead of melodic instruments. */
@@ -45,12 +49,25 @@ export class SoundFontInstrument implements Instrument {
       this.synth.controllerChange(ch, 32, preset.bankLSB);
     }
     this.synth.programChange(ch, preset.program);
+    if (!this.drums) this.synth.pitchWheelRange(ch, MAX_BEND);
     // the app's own Space slider controls reverb, so silence the SoundFont synth's built-in reverb and chorus
     this.synth.controllerChange(ch, 91, 0);
     this.synth.controllerChange(ch, 93, 0);
   }
 
-  playNote(_ctx: BaseAudioContext, _dest: AudioNode, pitch: number, when: number, duration: number, velocity: number) {
+  playNote(_ctx: BaseAudioContext, _dest: AudioNode, pitch: number, when: number, duration: number, velocity: number, bend?: NoteBend) {
+    if (!this.drums) {
+      // The pitch wheel belongs to the whole channel, so slides on overlapping notes bend each other.
+      if (bend && bend.semitones !== 0) {
+        // set the bend range right before the slide, so nothing earlier on the channel can leave it at the default
+        this.synth.pitchWheelRange(this.channel, MAX_BEND, { time: when });
+        for (const s of pitchWheelSteps(bend, duration)) this.synth.pitchWheel(this.channel, s.value, { time: when + s.t });
+        this.bentDirty = true;
+      } else if (this.bentDirty) {
+        this.synth.pitchWheel(this.channel, 8192, { time: when });
+        this.bentDirty = false;
+      }
+    }
     this.synth.noteOn(this.channel, pitch, Math.round(velocity * 127), { time: when });
     this.synth.noteOff(this.channel, pitch, { time: when + duration });
   }

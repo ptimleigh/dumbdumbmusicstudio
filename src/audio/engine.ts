@@ -1,6 +1,7 @@
 import type { Project, SoundFontPreset, Track } from '../music/types';
 import { SoundFontInstrument } from './soundfont';
 import { createRecorderNode } from './recorder';
+import type { NoteBend } from '../music/bend';
 import { BuiltInSynth, DEFAULT_VOICE, builtInFor, type Instrument } from './instrument';
 import { applyMacros, createTrackChain, makeImpulse, type TrackChain } from './chain';
 
@@ -55,11 +56,11 @@ export class Engine {
   }
 
   /** Play a single note immediately (for auditioning while editing). */
-  preview(track: Track, pitch: number, duration = 0.4) {
+  preview(track: Track, pitch: number, duration = 0.4, bend?: NoteBend) {
     const ctx = this.ensure();
     if (ctx.state === 'suspended') void ctx.resume();
     this.applyTrackSettings(track);
-    this.chainFor(track).instrument.playNote(ctx, this.chainFor(track).chain.input, pitch, ctx.currentTime + 0.01, duration, 0.8);
+    this.chainFor(track).instrument.playNote(ctx, this.chainFor(track).chain.input, pitch, ctx.currentTime + 0.01, duration, 0.8, bend);
   }
 
   async play(opts: { loop?: boolean } = {}) {
@@ -109,7 +110,7 @@ export class Engine {
             const absStart = n.start + k * total;
             if (absStart >= from && absStart < to) {
               const when = this.startedAt + absStart * secPerBeat;
-              chain.instrument.playNote(ctx, chain.chain.input, n.pitch, when, n.duration * secPerBeat, 0.8);
+              chain.instrument.playNote(ctx, chain.chain.input, n.pitch, when, n.duration * secPerBeat, 0.8, n.bend);
             }
           }
         }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Note, Project, Track } from '../music/types';
 import { DURATION_LABELS, isBlackKey, isInScale, noteName, snapToScale } from '../music/theory';
+import { clampSemitones, slideToNext, type NoteBend } from '../music/bend';
 import { chordScaleOf, findClashes, lastChord, ROMAN, suggestNext, triadPitches } from '../music/harmony';
 import { engine } from '../audio/engine';
 import { uid } from '../music/project';
@@ -89,6 +90,41 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
+  const secPerBeat = 60 / project.tempo;
+  const updateNote = (id: string, patch: Partial<Note>, key?: string) =>
+    onNotes(track.notes.map(n => (n.id === id ? { ...n, ...patch } : n)), key);
+
+  /** Sets a note's slide (or removes it) and plays it so the change can be heard. */
+  function setBend(n: Note, bend: NoteBend | undefined, key?: string, audition = true) {
+    const clean = bend && bend.semitones !== 0 ? bend : undefined;
+    onNotes(track.notes.map(x => {
+      if (x.id !== n.id) return x;
+      const { bend: _old, ...rest } = x; void _old;
+      return clean ? { ...rest, bend: clean } : rest;
+    }), key);
+    if (audition) engine.preview(track, n.pitch, Math.min(1.5, n.duration * secPerBeat), clean);
+  }
+
+  const slideDrag = useRef<{ gid: string; y0: number; from: number; note: Note; last: number } | null>(null);
+  function slideDown(e: React.PointerEvent<HTMLDivElement>, n: Note) {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    slideDrag.current = { gid: uid('slide'), y0: e.clientY, from: n.bend?.semitones ?? 0, note: n, last: n.bend?.semitones ?? 0 };
+  }
+  function slideMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = slideDrag.current; if (!d) return;
+    const semis = clampSemitones(d.from - (e.clientY - d.y0) / ROW_H);
+    if (semis === d.last) return;
+    d.last = semis;
+    setBend(d.note, { semitones: semis, late: d.note.bend?.late }, d.gid, false);
+    engine.preview(track, d.note.pitch + semis, 0.25);
+  }
+  function slideUp(e: React.PointerEvent<HTMLDivElement>) {
+    const d = slideDrag.current; slideDrag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (d && d.last !== d.from) engine.preview(track, d.note.pitch, Math.min(1.5, d.note.duration * secPerBeat), d.last ? { semitones: d.last, late: d.note.bend?.late } : undefined);
+  }
+
   const removeNote = (id: string) => { setSelected(null); onNotes(track.notes.filter(x => x.id !== id)); };
 
   // Delete or Backspace removes the selected note
@@ -143,6 +179,23 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
           {suggestions.slice(0, 2).map((x, i) => <span key={x.degree}>{i > 0 && ' or '}<strong>{roman[x.degree]}</strong> ({x.reason})</span>)}
         </span>
       </div>
+      {selectedNote && (
+        <div className="roll-tools sub slide-tools">
+          <strong>Slide</strong>
+          <input type="range" min={-12} max={12} step={1} value={selectedNote.bend?.semitones ?? 0} aria-label="Slide amount in semitones"
+            onChange={e => setBend(selectedNote, { semitones: +e.target.value, late: selectedNote.bend?.late }, `bend:${selectedNote.id}`)} />
+          <span className="slide-readout">
+            {(selectedNote.bend?.semitones ?? 0) === 0 ? 'none' : `${selectedNote.bend!.semitones > 0 ? 'up' : 'down'} ${Math.abs(selectedNote.bend!.semitones)} ${Math.abs(selectedNote.bend!.semitones) === 1 ? 'step' : 'steps'}`}
+          </span>
+          <label className="check"><input type="checkbox" checked={!!selectedNote.bend?.late} disabled={!selectedNote.bend}
+            onChange={e => selectedNote.bend && setBend(selectedNote, { ...selectedNote.bend, late: e.target.checked || undefined })} /> Hold first, then slide</label>
+          <button className="chip" disabled={slideToNext(selectedNote, track.notes) === null}
+            title="Glide from this note into the next one"
+            onClick={() => { const to = slideToNext(selectedNote, track.notes); if (to !== null) setBend(selectedNote, { semitones: to, late: selectedNote.bend?.late }); }}>Slide to next note</button>
+          {selectedNote.bend && <button className="chip" onClick={() => setBend(selectedNote, undefined, undefined, false)}>Remove slide</button>}
+          <span className="hint">Or drag the dot at the end of the note up or down.</span>
+        </div>
+      )}
       <div className="roll-scroll">
         <div className="keys">
           {rows.map(p => (
@@ -172,10 +225,24 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
               <span className="grip left" /><span className="label">{n.duration >= 1 ? noteName(n.pitch) : ''}</span><span className="grip right" />
             </div>
           ))}
+          <svg className="slides" width={total * BEAT_W} height={rows.length * ROW_H} aria-hidden="true">
+            {track.notes.filter(n => n.bend).map(n => {
+              const x0 = n.start * BEAT_W, x1 = (n.start + n.duration) * BEAT_W - 1;
+              const y0 = (HIGH - n.pitch) * ROW_H + ROW_H / 2, y1 = y0 - n.bend!.semitones * ROW_H;
+              const xh = x0 + (n.bend!.late ? 0.5 : 0) * (x1 - x0);
+              return <g key={n.id}><polyline points={`${x0},${y0} ${xh},${y0} ${x1},${y1}`} fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" /><circle cx={x1} cy={y1} r="3" fill="#fff" /></g>;
+            })}
+          </svg>
+          {selectedNote && (
+            <div className="slide-handle" title="Drag up or down to slide this note"
+              style={{ left: (selectedNote.start + selectedNote.duration) * BEAT_W + 3, top: (HIGH - selectedNote.pitch - (selectedNote.bend?.semitones ?? 0)) * ROW_H + ROW_H / 2 - 7 }}
+              onPointerDown={e => slideDown(e, selectedNote)} onPointerMove={slideMove} onPointerUp={slideUp} onPointerCancel={slideUp}
+              onMouseDown={e => e.stopPropagation()} />
+          )}
           <div className="playhead" style={{ left: playhead * BEAT_W, display: playhead > 0 ? 'block' : 'none' }} />
         </div>
       </div>
-      <p className="help">Tap or click the grid to add a note · drag a note's edges to resize it, or its middle to move it · select a note, then press Delete or use the Remove button · Space to play/stop</p>
+      <p className="help">Tap or click the grid to add a note · drag a note's edges to resize it, or its middle to move it · select a note to slide it, or remove it with Delete · Space to play/stop</p>
     </section>
   );
 }

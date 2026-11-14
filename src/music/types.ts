@@ -1,10 +1,12 @@
 import type { VoiceId } from '../audio/instrument';
+import type { NoteBend } from './bend';
 
 export interface Note {
   id: string;
   pitch: number;    // MIDI note number
   start: number;    // in beats
   duration: number; // in beats
+  bend?: NoteBend;  // optional slide up or down while the note plays
 }
 
 /** Qualitative controls, each 0..10. 5 is "neutral". */

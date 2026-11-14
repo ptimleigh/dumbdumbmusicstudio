@@ -1,6 +1,7 @@
 import type { Note, Project, ScaleName, Track } from './types';
 import { newProject, newTrack, uid } from './project';
 import { SCALES } from './theory';
+import { cleanBend } from './bend';
 import { VOICE_IDS, type VoiceId } from '../audio/instrument';
 
 const FORMAT = 'dumbdumbmusicstudio';
@@ -25,6 +26,7 @@ function parseTrack(raw: any): Track | null {
           pitch: Math.round(num(n.pitch, 0, 127, 60)),
           start: Math.max(0, n.start),
           duration: n.duration,
+          ...(cleanBend(n.bend) ? { bend: cleanBend(n.bend) } : {}),
         }))
     : [];
   let sound: Track['sound'] = { kind: 'synth' };
