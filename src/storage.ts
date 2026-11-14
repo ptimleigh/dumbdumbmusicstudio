@@ -6,15 +6,33 @@ const DB = 'dumbdumbmusicstudio';
 const STORE = 'soundfonts';
 
 /** Browser storage can be missing or blocked; every call fails quietly so the app still works. */
-export function loadAutosave(): Project | null {
+export interface Stored { project: Project; text: string }
+
+/** The autosaved song, with the exact text that was stored (used to notice when another tab changes it). */
+export function loadAutosave(): Stored | null {
   try {
     const text = localStorage.getItem(KEY);
-    return text ? parseProject(text) : null;
+    return text ? { project: parseProject(text), text } : null;
   } catch { return null; }
 }
 
-export function saveAutosave(p: Project) {
-  try { localStorage.setItem(KEY, serializeProject(p)); } catch { /* storage full or blocked */ }
+export const AUTOSAVE_KEY = KEY;
+export const readAutosaveText = (): string | null => { try { return localStorage.getItem(KEY); } catch { return null; } };
+
+export type SaveResult = { ok: true; text: string } | { ok: false; reason: 'other-tab' | 'failed' };
+
+/**
+ * Saves the song. `lastSeen` is what this tab last wrote or read: if the stored song is different, another tab has
+ * changed it since, and this save is refused (unless `force`) so one tab never silently overwrites another's work.
+ */
+export function saveAutosave(p: Project, lastSeen: string | null, force = false): SaveResult {
+  try {
+    const stored = localStorage.getItem(KEY);
+    if (!force && stored !== null && stored !== lastSeen) return { ok: false, reason: 'other-tab' };
+    const text = serializeProject(p);
+    localStorage.setItem(KEY, text);
+    return { ok: true, text };
+  } catch { return { ok: false, reason: 'failed' }; }
 }
 
 export function clearAutosave() {

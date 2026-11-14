@@ -37,14 +37,20 @@ export const withSemitones = (b: NoteBend | undefined, semitones: number): NoteB
   return { semitones, ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) };
 };
 
-/** Sets where the glide starts and ends (fractions of the note), snapping to the very start or end when close. */
+/**
+ * Sets where the glide starts and ends (fractions of the note), snapping to the very start or end when close.
+ * The answer is stable: running it on its own output changes nothing, so a saved song reloads exactly as it was.
+ */
 export function withTiming(b: NoteBend, from: number, to: number): NoteBend {
   let f = clamp(from, 0, 1 - MIN_SLIDE), t = clamp(to, MIN_SLIDE, 1);
-  if (f < 0.03) f = 0;
-  if (t > 0.97) t = 1;
-  if (t - f < MIN_SLIDE) { if (f + MIN_SLIDE <= 1) t = f + MIN_SLIDE; else { t = 1; f = 1 - MIN_SLIDE; } }
+  for (let i = 0; i < 4; i++) {
+    f = +f.toFixed(3); t = +t.toFixed(3);
+    if (f < 0.03) f = 0;
+    if (t > 0.97) t = 1;
+    if (t - f < MIN_SLIDE - 1e-9) { if (f + MIN_SLIDE <= 1) t = f + MIN_SLIDE; else { t = 1; f = 1 - MIN_SLIDE; } }
+  }
   const { semitones } = b;
-  return { semitones, ...(f > 0 ? { from: +f.toFixed(3) } : {}), ...(t < 1 ? { to: +t.toFixed(3) } : {}) };
+  return { semitones, ...(f > 0 ? { from: f } : {}), ...(t < 1 ? { to: t } : {}) };
 }
 
 /** The slide that ends exactly on the next note's pitch, or null if this is the last note. */

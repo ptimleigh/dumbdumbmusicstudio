@@ -74,6 +74,14 @@ describe('bend', () => {
       expect(withTiming({ semitones: 3 }, 0.3, 0.6)).toEqual({ semitones: 3, from: 0.3, to: 0.6 });
       expect(withTiming({ semitones: 3 }, 0.6, 0.3)).toEqual({ semitones: 3, from: 0.6, to: 0.65 });
     });
+    it('is stable: normalising twice gives the same answer as once', () => {
+      let seed = 7; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+      for (let i = 0; i < 20000; i++) {
+        const once = withTiming({ semitones: 3 }, rnd() * 1.2 - 0.1, rnd() * 1.2 - 0.1);
+        const twice = withTiming(once, once.from ?? 0, once.to ?? 1);
+        expect(twice).toEqual(once);
+      }
+    });
     it('keeps the timing when only the size changes', () => {
       expect(withSemitones({ semitones: 2, from: 0.4, to: 0.9 }, 7)).toEqual({ semitones: 7, from: 0.4, to: 0.9 });
       expect(withSemitones(undefined, 5)).toEqual({ semitones: 5 });

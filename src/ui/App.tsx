@@ -6,7 +6,7 @@ import { NOTE_NAMES, SCALE_LABELS } from '../music/theory';
 import { baseName, fileNameFor, parseProject, serializeProject } from '../music/serialize';
 import { buildMidi } from '../audio/midi';
 import { downloadBytes } from './download';
-import { clearAutosave, getSoundFont, loadAutosave, putSoundFont, saveAutosave } from '../storage';
+import { AUTOSAVE_KEY, clearAutosave, getSoundFont, loadAutosave, putSoundFont, readAutosaveText, saveAutosave } from '../storage';
 import { engine } from '../audio/engine';
 import { PianoRoll } from './PianoRoll';
 import { DrumGrid } from './DrumGrid';
@@ -19,7 +19,11 @@ import { normalizeRegion, type Region } from '../audio/transport';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
-  const [hist, setHist] = useState(() => initHistory(loadAutosave() ?? newProject()));
+  const [initial] = useState(() => loadAutosave());
+  const lastSeen = useRef<string | null>(initial?.text ?? null);     // the autosave text this tab last wrote or read
+  const [conflict, setConflict] = useState(false);                  // another tab changed the song; saving here is paused
+  const [saveFailed, setSaveFailed] = useState(false);              // the browser refused to store the song
+  const [hist, setHist] = useState(() => initHistory(initial?.project ?? newProject()));
   const project = hist.present;
   type Opts = { key?: string; silent?: boolean };
   const setProject = (f: (p: Project) => Project, o: Opts = {}) =>
@@ -103,11 +107,48 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // autosave shortly after every change
+  // Autosave shortly after a change, and straight away when the page is hidden or closed (switching apps on a phone,
+  // reloading, closing the tab), so the last thing you did is never lost.
+  const conflictRef = useRef(false); conflictRef.current = conflict;
+  function persist(force = false) {
+    if (conflictRef.current && !force) return;
+    const r = saveAutosave(projectRef.current, lastSeen.current, force);
+    if (r.ok) { lastSeen.current = r.text; setSaveFailed(false); }
+    else if (r.reason === 'other-tab') setConflict(true);
+    else setSaveFailed(true);
+  }
   useEffect(() => {
-    const t = window.setTimeout(() => saveAutosave(project), 400);
+    const t = window.setTimeout(() => persist(), 400);
     return () => clearTimeout(t);
-  }, [project]);
+  }, [project]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const flush = () => persist();
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    const onStorage = (e: StorageEvent) => { if (e.key === AUTOSAVE_KEY && e.newValue !== lastSeen.current) setConflict(true); };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Another tab changed the song: take its version here. */
+  function loadOtherVersion() {
+    const text = readAutosaveText();
+    try { if (text) { const p = parseProject(text); lastSeen.current = text; setConflict(false); openProject(p); toast('Loaded the version from the other tab'); return; } } catch { /* fall through */ }
+    setConflict(false);
+  }
+  /** Keep this tab's version and overwrite the other one. */
+  function keepThisVersion() {
+    lastSeen.current = readAutosaveText();
+    setConflict(false); conflictRef.current = false;
+    persist(true);
+  }
 
   // bring back the SoundFonts the autosaved project was using
   useEffect(() => { void restoreSoundFonts(projectRef.current); }, []);
@@ -168,7 +209,7 @@ export function App() {
   function newSong() {
     if (!confirmNew) { setConfirmNew(true); window.setTimeout(() => setConfirmNew(false), 4000); return; }
     setConfirmNew(false);
-    clearAutosave();
+    clearAutosave(); lastSeen.current = null;
     openProject(newProject());
     setNotices([]);
     toast('Started a new song');
@@ -312,6 +353,22 @@ export function App() {
       </header>
 
       {showWelcome && <Welcome onExample={loadExample} onClose={closeWelcome} />}
+
+      {conflict && (
+        <div className="notices" role="alert">
+          <p><strong>This song was changed in another tab.</strong> Automatic saving is paused here so it does not overwrite that work.</p>
+          <span className="row-gap">
+            <button className="btn small" onClick={loadOtherVersion}>Load that version</button>
+            <button className="btn small" onClick={keepThisVersion}>Keep this one</button>
+          </span>
+        </div>
+      )}
+      {saveFailed && !conflict && (
+        <div className="notices" role="alert">
+          <p><strong>Automatic saving is not working in this browser.</strong> Storage may be full, or private browsing may be on. Use File → Save song to keep your work.</p>
+          <button className="btn small" onClick={() => setSaveFailed(false)}>Dismiss</button>
+        </div>
+      )}
 
       {notices.length > 0 && (
         <div className="notices" role="status">
