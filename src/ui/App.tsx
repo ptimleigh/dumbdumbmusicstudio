@@ -8,6 +8,7 @@ import { clearAutosave, getSoundFont, loadAutosave, putSoundFont, saveAutosave }
 import { engine } from '../audio/engine';
 import { PianoRoll } from './PianoRoll';
 import { DrumGrid } from './DrumGrid';
+import { ExportDialog } from './ExportDialog';
 import { TrackPanel } from './TrackPanel';
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
   const [sfError, setSfError] = useState<string | null>(null);
   const [notices, setNotices] = useState<string[]>([]);
   const [confirmNew, setConfirmNew] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const openRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
@@ -43,7 +45,7 @@ export function App() {
       const typing = tag === 'TEXTAREA' || (tag === 'INPUT' && (e.target as HTMLInputElement).type === 'text');
       if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if ((e.ctrlKey || e.metaKey) && !typing && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
-      if (e.code === 'Space' && (e.target as HTMLElement).tagName !== 'SELECT' && (e.target as HTMLElement).tagName !== 'INPUT') {
+      if (e.code === 'Space' && !exporting && (e.target as HTMLElement).tagName !== 'SELECT' && (e.target as HTMLElement).tagName !== 'INPUT') {
         e.preventDefault(); togglePlay();
       }
     };
@@ -167,11 +169,13 @@ export function App() {
 
   return (
     <div className="app">
+      {exporting && <ExportDialog project={project} onClose={() => setExporting(false)} />}
       <header className="topbar">
         <h1>🎹 Dumb Dumb Music Studio</h1>
         <input className="song-name" aria-label="Song name" value={project.name} onChange={e => patch({ name: e.target.value }, 'song-name')} />
         <button onClick={undo} disabled={hist.past.length === 0} title="Undo (Ctrl+Z)">↶ Undo</button>
         <button onClick={redo} disabled={hist.future.length === 0} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+        <button onClick={() => { engine.stop(); setPlaying(false); setExporting(true); }} title="Record the song to an audio file">Export WAV</button>
         <button onClick={saveToFile} title="Download this song as a file">Save</button>
         <button onClick={() => openRef.current?.click()} title="Open a saved song file">Open</button>
         <button onClick={newSong}>{confirmNew ? 'Click again to start over' : 'New'}</button>

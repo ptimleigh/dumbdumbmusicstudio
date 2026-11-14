@@ -1,5 +1,6 @@
 import type { Project, SoundFontPreset, Track } from '../music/types';
 import { SoundFontInstrument } from './soundfont';
+import { createRecorderNode } from './recorder';
 import { builtInFor, type Instrument } from './instrument';
 import { applyMacros, createTrackChain, makeImpulse, type TrackChain } from './chain';
 
@@ -18,6 +19,7 @@ export class Engine {
   private startedAt = 0;      // ctx time corresponding to beat 0 of the current pass
   private scheduledUpTo = 0;  // beats
   playing = false;
+  private loop = true;
 
   getProject: () => Project = () => { throw new Error('getProject not set'); };
 
@@ -58,10 +60,11 @@ export class Engine {
     this.chainFor(track).instrument.playNote(ctx, this.chainFor(track).chain.input, pitch, ctx.currentTime + 0.01, duration, 0.8);
   }
 
-  async play() {
+  async play(opts: { loop?: boolean } = {}) {
     const ctx = this.ensure();
     if (ctx.state === 'suspended') await ctx.resume();
     if (this.playing) return;
+    this.loop = opts.loop ?? true;
     this.playing = true;
     this.startedAt = ctx.currentTime + 0.08;
     this.scheduledUpTo = 0;
@@ -92,14 +95,15 @@ export class Engine {
     const horizon = ((ctx.currentTime - this.startedAt) + 0.15) / secPerBeat; // beats
     while (this.scheduledUpTo < horizon) {
       const from = this.scheduledUpTo;
-      const to = Math.min(horizon, from + 0.5);
+      if (!this.loop && from >= total) break;
+      const to = Math.min(horizon, from + 0.5, this.loop ? Infinity : total);
       for (const track of p.tracks) {
         this.applyTrackSettings(track);
         const chain = this.chainFor(track);
         for (const n of track.notes) {
           // loop: note start repeats every `total` beats
           const loopIdx = Math.floor(from / total);
-          for (const k of [loopIdx, loopIdx + 1]) {
+          for (const k of this.loop ? [loopIdx, loopIdx + 1] : [0]) {
             const absStart = n.start + k * total;
             if (absStart >= from && absStart < to) {
               const when = this.startedAt + absStart * secPerBeat;
@@ -110,6 +114,46 @@ export class Engine {
       }
       this.scheduledUpTo = to;
     }
+  }
+
+  /**
+   * Plays the song once from the start and records everything that comes out, in real time.
+   * Returns null if cancelled.
+   */
+  async record(o: { tailSeconds: number; onProgress: (fraction: number) => void; signal: { cancelled: boolean } }):
+    Promise<{ channels: Float32Array[]; sampleRate: number } | null> {
+    this.stop();
+    const ctx = this.ensure();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const node = await createRecorderNode(ctx);
+    const sink = ctx.createGain(); sink.gain.value = 0;
+    node.connect(sink).connect(ctx.destination);
+    const left: Float32Array[] = [], right: Float32Array[] = [];
+    node.port.onmessage = e => { left.push(e.data[0]); right.push(e.data[1]); };
+    this.master.connect(node);
+
+    const p = this.getProject();
+    const seconds = (p.bars * p.beatsPerBar * 60) / p.tempo + o.tailSeconds + 0.15;
+    await this.play({ loop: false });
+    const t0 = ctx.currentTime;
+    try {
+      while (!o.signal.cancelled && ctx.currentTime - t0 < seconds) {
+        o.onProgress(Math.min(1, (ctx.currentTime - t0) / seconds));
+        await new Promise(r => setTimeout(r, 100));
+      }
+    } finally {
+      this.stop();
+      this.master.disconnect(node);
+      node.port.postMessage('stop');
+      node.disconnect(); sink.disconnect();
+    }
+    if (o.signal.cancelled) return null;
+    const join = (parts: Float32Array[]) => {
+      const out = new Float32Array(parts.reduce((n, a) => n + a.length, 0));
+      let off = 0; for (const a of parts) { out.set(a, off); off += a.length; }
+      return out;
+    };
+    return { channels: [join(left), join(right)], sampleRate: ctx.sampleRate };
   }
 
   /** Load a SoundFont file for a track and return the instruments inside it. */
