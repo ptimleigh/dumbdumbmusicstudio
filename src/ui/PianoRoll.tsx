@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Note, Project, Track } from '../music/types';
-import { DURATION_LABELS, isBlackKey, isInScale, noteName, snapToScale, triadFromDegree } from '../music/theory';
+import { DURATION_LABELS, isBlackKey, isInScale, noteName, snapToScale } from '../music/theory';
+import { chordScaleOf, findClashes, lastChord, ROMAN, suggestNext, triadPitches } from '../music/harmony';
 import { engine } from '../audio/engine';
 import { uid } from '../music/project';
 
@@ -15,6 +16,8 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
 }) {
   const [duration, setDuration] = useState(1);
   const [lock, setLock] = useState(true);
+  const [showGhosts, setShowGhosts] = useState(true);
+  const [showClashes, setShowClashes] = useState(true);
   const total = project.bars * project.beatsPerBar;
   const drag = useRef<Drag | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -22,6 +25,16 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
   const selectedNote = track.notes.find(n => n.id === selected) ?? null;
   const rows: number[] = [];
   for (let p = HIGH; p >= LOW; p--) rows.push(p);
+
+  const others = project.tracks.filter(t => t.id !== track.id && t.role !== 'drums');
+  const clashes = showClashes ? findClashes(track, others) : new Map();
+
+  // what chord just played here (or on the chords track), and what usually sounds good next
+  const roman = ROMAN[chordScaleOf(project.scaleName)];
+  const prevChord = lastChord(track.notes, project.beatsPerBar, project.key, project.scaleName)
+    ?? (others.find(t => t.role === 'chords') ? lastChord(others.find(t => t.role === 'chords')!.notes, project.beatsPerBar, project.key, project.scaleName) : null);
+  const suggestions = suggestNext(prevChord, project.scaleName);
+  const suggested = new Map(suggestions.map(x => [x.degree, x.reason]));
 
   function onGridDown(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -93,7 +106,7 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
     // drop a triad at the first free bar-aligned spot after the last note
     const lastEnd = track.notes.reduce((m, n) => Math.max(m, n.start + n.duration), 0);
     const start = Math.min(Math.ceil(lastEnd / project.beatsPerBar) * project.beatsPerBar, total - project.beatsPerBar);
-    const pitches = triadFromDegree(degree, project.key, project.scaleName, 48);
+    const pitches = triadPitches(degree, project.key, project.scaleName, 48);
     const notes = pitches.map(pitch => ({ id: uid('n'), pitch, start, duration: project.beatsPerBar }));
     onNotes([...track.notes, ...notes]);
     pitches.forEach(p => engine.preview(track, p, 0.8));
@@ -115,9 +128,20 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
         {selectedNote && <button className="chip danger" onClick={() => removeNote(selectedNote.id)} title="Or press Delete">Remove selected note</button>}
         <span className="spacer" />
         <span>Add chord:</span>
-        {['I', 'ii', 'iii', 'IV', 'V', 'vi'].map((n, i) => (
-          <button key={n} className="chip" onClick={() => addChord(i)} title="Adds a chord that fits your key">{n}</button>
+        {roman.map((name, i) => (
+          <button key={name} className={'chip' + (suggested.has(i) ? ' suggested' : '')} onClick={() => addChord(i)}
+            title={suggested.has(i) ? `${name}: ${suggested.get(i)}` : 'Adds a chord that fits your key'}>{name}</button>
         ))}
+      </div>
+      <div className="roll-tools sub">
+        <label className="check"><input type="checkbox" checked={showGhosts} onChange={e => setShowGhosts(e.target.checked)} /> Show other tracks faintly</label>
+        <label className="check"><input type="checkbox" checked={showClashes} onChange={e => setShowClashes(e.target.checked)} /> Highlight clashes</label>
+        {showClashes && clashes.size > 0 && <span className="warn">⚠ {clashes.size} {clashes.size === 1 ? 'note clashes' : 'notes clash'} with another track (dashed red)</span>}
+        <span className="spacer" />
+        <span className="hint">
+          {prevChord === null ? 'Start with ' : `After ${roman[prevChord]}, try `}
+          {suggestions.slice(0, 2).map((x, i) => <span key={x.degree}>{i > 0 && ' or '}<strong>{roman[x.degree]}</strong> ({x.reason})</span>)}
+        </span>
       </div>
       <div className="roll-scroll">
         <div className="keys">
@@ -133,8 +157,13 @@ export function PianoRoll({ project, track, playhead, onNotes }: {
           {Array.from({ length: total }, (_, b) => (
             <div key={b} className={'beat-line' + (b % project.beatsPerBar === 0 ? ' bar' : '')} style={{ left: b * BEAT_W }} />
           ))}
+          {showGhosts && others.flatMap(t => t.notes.filter(n => n.pitch >= LOW && n.pitch <= HIGH).map(n => (
+            <div key={t.id + n.id} className="ghost"
+              style={{ left: n.start * BEAT_W, top: (HIGH - n.pitch) * ROW_H, width: n.duration * BEAT_W - 1, height: ROW_H - 1, background: t.color }} />
+          )))}
           {track.notes.map(n => (
-            <div key={n.id} className={'note' + (n.id === selected ? ' selected' : '')} title="Drag the edges to resize, drag the middle to move. Select a note and press Delete to remove it"
+            <div key={n.id} className={'note' + (n.id === selected ? ' selected' : '') + (clashes.has(n.id) ? ' clash' : '')}
+              title={clashes.has(n.id) ? `Clashes with ${noteName(clashes.get(n.id)!.otherPitch)} on ${clashes.get(n.id)!.otherTrack}. Try moving it one step.` : 'Drag the edges to resize, drag the middle to move. Select a note and press Delete to remove it'}
               style={{ left: n.start * BEAT_W, top: (HIGH - n.pitch) * ROW_H, width: n.duration * BEAT_W - 1, height: ROW_H - 1, background: track.color }}
               onPointerDown={e => startDrag(e, n)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
               onMouseDown={e => e.stopPropagation()}

@@ -105,3 +105,14 @@ button:disabled { opacity:.5; cursor:default; }
   .welcome { padding:12px; }
   .roll-tools { gap:6px; }
 }
+
+.roll-tools.sub { padding-top:0; font-size:12px; }
+.roll-tools.sub .check { margin-left:0; }
+.chip.suggested { border-color:var(--accent); color:var(--accent); }
+.chip.suggested:hover { background:#3a2c3d; }
+.ghost { position:absolute; opacity:.22; border-radius:3px; pointer-events:none; }
+.note.clash { outline:2px dashed #ff6b6b; outline-offset:1px; z-index:1; }
+.warn { color:#ffb3b3; }
+.hint { color:var(--muted); }
+.hint strong { color:var(--text); }
+.note.clash.selected { outline:2px solid #fff; }

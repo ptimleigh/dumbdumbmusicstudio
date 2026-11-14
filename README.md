@@ -20,6 +20,7 @@ npm run dev
 - `src/audio/engine.ts` – Web Audio engine: look-ahead scheduler + per-track effect chain.
 - `src/music/drums.ts`, `src/ui/DrumGrid.tsx` – drum step grid (drum hits are ordinary notes with General MIDI pitches).
 - `src/audio/recorder.ts`, `src/audio/wav.ts`, `src/ui/ExportDialog.tsx` – WAV export (plays once in real time while recording, then encodes 16-bit PCM).
+- `src/music/harmony.ts` – chords from the key, chord detection, "what comes next" suggestions, clash detection (pure, tested).
 - `src/music/history.ts` – undo/redo (pure, tested).
 - `src/music/serialize.ts`, `src/storage.ts` – project files, autosave (localStorage) and SoundFont storage (IndexedDB).
 - `src/ui/` – React UI: piano roll, track tabs, sound-shaping panel.
@@ -32,6 +33,6 @@ npm run dev
 3. ~~Undo/redo~~ (done)
 3. ~~WAV export~~ (done: real-time recording) · MIDI export
 4. ~~Polish pass~~ (done: welcome + example song, built-in sound choices, touch/mobile layout, select-to-delete notes)
-5. Smarter music help (chord suggestions, clash hints)
+5. ~~Smarter music help~~ (done: chord suggestions, clash highlights, ghost notes)
 6. Audio recording/import
 7. Desktop wrapper for VST3/CLAP plugin hosting

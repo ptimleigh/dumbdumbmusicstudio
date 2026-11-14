@@ -24,7 +24,7 @@ export function exampleProject(): Project {
   melody.name = 'Melody';
   melody.notes = [
     [72, 0, 1], [74, 1, 0.5], [76, 1.5, 0.5], [79, 2, 1.5], [76, 4, 1], [74, 5, 1], [72, 6, 2],
-    [69, 8, 1], [72, 9, 1], [74, 10, 1], [76, 11, 1], [79, 12, 2], [76, 14, 2],
+    [69, 8, 1], [72, 9, 1], [74, 10, 1], [72, 11, 1], [79, 12, 2], [76, 14, 2],
   ].map(([p, s, d]) => note(p, s, d));
   melody.macros = { warmth: 6, punch: 5, space: 6 };
   const chords = newTrack('chords');
