@@ -201,7 +201,7 @@ export class Engine {
    * reverb), in the same pass, so all the files line up. Returns null if cancelled.
    */
   async record(o: { tailSeconds: number; onProgress: (fraction: number) => void; signal: { cancelled: boolean }; stems?: boolean }):
-    Promise<{ channels: Float32Array[]; sampleRate: number; stems: { id: string; name: string; channels: Float32Array[] }[] } | null> {
+    Promise<{ channels: Float32Array[]; sampleRate: number; songStart: number; songFrames: number; stems: { id: string; name: string; channels: Float32Array[] }[] } | null> {
     this.stop();
     const ctx = this.ensure();
     if (ctx.state === 'suspended') await ctx.resume();
@@ -239,6 +239,9 @@ export class Engine {
     const startAt = startFrame / sr, duration = frames / sr;
 
     await this.play({ from: 0, loop: null });
+    // where the song really begins inside the recording (it starts a moment after the recorders are armed)
+    const songStart = Math.max(0, Math.round(this.anchors[0].time * sr - startFrame));
+    const songFrames = Math.round(songSeconds * sr);
     try {
       const giveUp = ctx.currentTime + duration + 3;
       while (!o.signal.cancelled && !taps.every(t => t.done) && ctx.currentTime < giveUp) {
@@ -268,7 +271,7 @@ export class Engine {
       return { id: t.id, name: t.name, channels: ch };
     });
     const mix = done[0];
-    return { channels: mix.channels, sampleRate: ctx.sampleRate, stems: done.slice(1) };
+    return { channels: mix.channels, sampleRate: ctx.sampleRate, songStart, songFrames, stems: done.slice(1) };
   }
 
   /** Load a SoundFont file for a track and return the instruments inside it. */

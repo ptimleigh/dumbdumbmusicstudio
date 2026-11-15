@@ -35,6 +35,7 @@ person's own browser; nothing is uploaded anywhere.
 - `src/music/drums.ts`, `src/ui/DrumGrid.tsx` – drum step grid (drum hits are ordinary notes with General MIDI pitches), with box selection, move, and bar-based copy/paste/repeat (tested).
 - `src/audio/midi.ts` – Standard MIDI File export (one track per track, tempo/key, drums on channel 10, slides as pitch-wheel moves). `src/audio/zip.ts` – tiny ZIP writer for the track-file export.
 - `src/audio/recorder.ts`, `src/audio/wav.ts`, `src/ui/ExportDialog.tsx` – WAV export (plays once in real time while recording, then encodes 16-bit PCM; optionally records every track on its own in the same pass, all aligned to the same audio frame).
+- `src/audio/loopfold.ts` – "Make it loop seamlessly": the recorded fade-out after the last note is added onto the start of the file, which is cut to exactly the song length, so the end flows into the beginning (the engine reports where the song really starts inside the recording).
 - `src/music/harmony.ts` – chords from the key, chord detection, "what comes next" suggestions, clash detection (pure, tested).
 - `src/music/bend.ts` – note slides (pitch glides up or down while a note plays, between a start and an end point inside the note); built-in synth ramps frequency, SoundFonts use MIDI pitch wheel events.
 - `src/music/edit.ts` – pure note-editing helpers: group move/resize, scale steps, copy/paste, box selection (tested).

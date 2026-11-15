@@ -3,6 +3,7 @@ import type { Project } from '../music/types';
 import { engine } from '../audio/engine';
 import { encodeWav, gainForPeak, peakOf } from '../audio/wav';
 import { makeZip } from '../audio/zip';
+import { foldTail } from '../audio/loopfold';
 import { baseName } from '../music/serialize';
 import { downloadBytes } from './download';
 import { Switch } from './kit';
@@ -15,6 +16,7 @@ export function ExportDialog({ project, onClose }: { project: Project; onClose: 
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
   const [stems, setStems] = useState(false);
+  const [loop, setLoop] = useState(false);
   const signal = useRef({ cancelled: false });
 
   const songSeconds = (project.bars * project.beatsPerBar * 60) / project.tempo;
@@ -28,7 +30,11 @@ export function ExportDialog({ project, onClose }: { project: Project; onClose: 
     try {
       const result = await engine.record({ tailSeconds: TAIL_SECONDS, onProgress: setProgress, signal: signal.current, stems });
       if (!result) { onClose(); return; }
-      const base = baseName(project);
+      const base = baseName(project) + (loop ? ' (loop)' : '');
+      // for a loop, the reverb tail is folded onto the start so the file ends exactly where the song does
+      const fold = (chs: Float32Array[]) => (loop ? chs.map(c => foldTail(c, result.songStart, result.songFrames)) : chs);
+      result.channels = fold(result.channels);
+      for (const s of result.stems) s.channels = fold(s.channels);
       // one gain for everything, so the track files add up to the mix and keep their levels relative to each other
       const gain = gainForPeak(peakOf(result.channels), -1);
       const mix = new Uint8Array(encodeWav(result.channels, result.sampleRate, null, gain));
@@ -58,6 +64,14 @@ export function ExportDialog({ project, onClose }: { project: Project; onClose: 
           <>
             <p>Your song plays once, from the start, while it is recorded. It takes about <strong>{total} seconds</strong>,
               which includes {TAIL_SECONDS} seconds at the end so echoes and reverb fade out naturally.</p>
+            <div className="export-option">
+              <Switch checked={loop} onChange={setLoop}>Make it loop seamlessly</Switch>
+              <p className="muted small">
+                {loop
+                  ? 'The fade-out at the end is mixed into the start instead, and the file is exactly as long as your song. Played on repeat, the end flows into the beginning with no gap, click or cut-off reverb. Good for game music, video backgrounds and loop packs.'
+                  : 'Without this, the file has a few seconds of fade-out at the end, which sounds like a pause when it repeats.'}
+              </p>
+            </div>
             <div className="export-option">
               <Switch checked={stems} onChange={setStems}>Also save each track on its own</Switch>
               <p className="muted small">
